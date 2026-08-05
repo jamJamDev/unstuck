@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Unstuck — browser tests</title>
+<style>
+  body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #101318; color: #eef1f6; margin: 0; padding: 20px 20px 60px; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  #summary { margin: 0 0 18px; color: #97a1b3; }
+  #summary.pass strong { color: #56d6a0; }
+  #summary.fail strong { color: #ff7a7a; }
+  ol { list-style: none; margin: 0; padding: 0; max-width: 900px; }
+  li { padding: 7px 10px; border-left: 3px solid #2c333f; margin-bottom: 4px; background: #191d25; border-radius: 0 8px 8px 0; }
+  li.pass { border-left-color: #56d6a0; }
+  li.fail { border-left-color: #ff7a7a; }
+  li .why { display: block; color: #ff9d9d; font-family: ui-monospace, Menlo, monospace; font-size: 13px; white-space: pre-wrap; margin-top: 4px; }
+  #rig { position: fixed; right: 12px; bottom: 12px; width: 380px; height: 700px;
+         border: 1px solid #2c333f; border-radius: 12px; transform: scale(0.42);
+         transform-origin: bottom right; opacity: 0.85; }
+</style>
+</head>
+<body>
+<h1>Unstuck — browser tests</h1>
+<p id="summary">Running…</p>
+<ol id="results"></ol>
+<iframe id="rig" title="app under test"></iframe>
+
+<script>
+// Drives the real app in an iframe: real CSS, real DOM wiring, real localStorage.
+// Covers what the Node suite structurally cannot. Open via ./test.sh --browser.
+// The drag gesture is NOT covered here — synthetic pointer events cannot hold a
+// pointer capture — so it is verified by hand against a real device.
+(() => {
+  'use strict';
+
+  const APP_URL = '../index.html';
+  const results = document.getElementById('results');
+  const tests = [];
+  let passed = 0, failed = 0;
+
+  const test = (name, fn) => tests.push({ name, fn });
+
+  function record(name, error) {
+    const li = document.createElement('li');
+    li.className = error ? 'fail' : 'pass';
+    li.textContent = (error ? '✖ ' : '✔ ') + name;
+    if (error) {
+      const why = document.createElement('span');
+      why.className = 'why';
+      why.textContent = error.stack || String(error);
+      li.appendChild(why);
+      failed++;
+    } else {
+      passed++;
+    }
+    results.appendChild(li);
+  }
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message || 'assertion failed');
+  }
+
+  function equal(actual, expected, message) {
+    if (actual !== expected) {
+      throw new Error((message || 'not equal') + '\n  expected: ' + JSON.stringify(expected) + '\n  actual:   ' + JSON.stringify(actual));
+    }
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function waitFor(fn, what, timeout) {
+    const limit = Date.now() + (timeout || 3000);
+    for (;;) {
+      let value;
+      try { value = fn(); } catch (err) { value = null; }
+      if (value) return value;
+      if (Date.now() > limit) throw new Error('timed out waiting for ' + (what || 'condition'));
+      await sleep(25);
+    }
+  }
+
+  /** Boots the app in the rig with the given saved state (or a raw string). */
+  async function boot(saved) {
+    const frame = document.getElementById('rig');
+    // Same-origin, so the app's storage is reachable from here.
+    localStorage.removeItem('unstuck.v1');
+    if (saved !== undefined) {
+      localStorage.setItem('unstuck.v1', typeof saved === 'string' ? saved : JSON.stringify(saved));
+    }
+    await new Promise((resolve) => {
+      frame.onload = resolve;
+      frame.src = APP_URL + '?t=' + Date.now();
+    });
+    const win = frame.contentWindow;
+    await waitFor(() => win.document.getElementById('app'), 'app to render');
+    return { win, doc: win.document, $: (id) => win.document.getElementById(id) };
+  }
+
+  const stored = () => JSON.parse(localStorage.getItem('unstuck.v1'));
+  const shown = (win, el) => el && win.getComputedStyle(el).display !== 'none';
+
+  /** Waits for the riffle animation to land — the announcer only fires on settle. */
+  const settled = (app) => waitFor(
+    () => app.$('announcer').textContent.startsWith('Picked:') && app.$('cardWhat').textContent,
+    'a pick to settle'
+  );
+
+  function listOf(kind, name, texts) {
+    return {
+      id: 'l-' + name, name, kind, color: 'sky',
+      items: texts.map((t, i) => ({ id: name + '-' + i, text: t, done: false, doneAt: 0, count: 0, lastDone: 0 })),
+    };
+  }
+  const stateOf = (lists, selection) => ({ schema: 1, lists, selection: selection || [], history: [] });
+
+  // ------------------------------------------------------------- the tests
+
+  test('hidden elements are really hidden, not just marked', async () => {
+    const app = await boot(stateOf([listOf('todo', 'A', ['one'])]));
+    // Regression: several of these set an explicit display, which beat [hidden].
+    equal(shown(app.win, app.$('backBtn')), false, 'back button must not show on Decide');
+    equal(shown(app.win, app.$('screenLists')), false, 'the Lists screen must be hidden');
+    equal(shown(app.win, app.$('card')), false, 'no card before a pick');
+    equal(shown(app.win, app.$('onboard')), false, 'onboarding must not show when lists exist');
+    equal(shown(app.win, app.$('pickBtn')), true, 'the pick button must be visible');
+  });
+
+  test('a first run offers onboarding instead of an empty picker', async () => {
+    const app = await boot();
+    equal(shown(app.win, app.$('onboard')), true);
+    equal(shown(app.win, app.$('pickBtn')), false);
+    equal(shown(app.win, app.$('chips')), false, 'no chips when there are no lists');
+  });
+
+  test('the starter picker adds only the lists that were chosen', async () => {
+    const app = await boot();
+    app.$('seedBtn').click();
+    await waitFor(() => app.$('starterDialog').open, 'the starter dialog');
+    const options = app.doc.querySelectorAll('#starterOptions .starter');
+    assert(options.length >= 4, 'the picker must offer a real choice');
+    equal([...options].every((o) => o.getAttribute('aria-pressed') === 'false'), true,
+      'nothing may be preselected — unasked-for lists are the clutter this app fights');
+    equal(app.$('starterAdd').disabled, true, 'cannot add nothing');
+
+    // The name element holds a text node plus a kind badge; only the text is the name.
+    const nameOf = (opt) => opt.querySelector('.name').firstChild.nodeValue;
+    const wanted = [nameOf(options[0]), nameOf(options[2])];
+    options[0].click();
+    options[2].click();
+    equal(app.$('starterAdd').textContent, 'Add 2 lists');
+    app.$('starterAdd').click();
+
+    await waitFor(() => stored() && stored().lists.length === 2, 'the chosen lists');
+    equal(stored().lists.map((l) => l.name).join(', '), wanted.join(', '), 'added the wrong lists');
+    equal(shown(app.win, app.$('pickBtn')), true, 'the picker becomes usable');
+    equal(app.doc.querySelectorAll('#chips .chip').length, 3, 'Everything plus one chip per list');
+  });
+
+  test('starter lists can be added again later and undone', async () => {
+    const app = await boot(stateOf([listOf('todo', 'Mine', ['Something'])]));
+    app.$('tabLists').click();
+    app.$('starterBtn').click();
+    await waitFor(() => app.$('starterDialog').open, 'the starter dialog');
+    app.doc.querySelector('#starterOptions .starter').click();
+    app.$('starterAdd').click();
+    await waitFor(() => stored().lists.length === 2, 'the added list');
+    app.$('toastAction').click();
+    await waitFor(() => stored().lists.length === 1, 'the undo');
+    equal(stored().lists[0].name, 'Mine', 'undo removed the wrong list');
+  });
+
+  test('a list kind can be changed after creation, keeping every item', async () => {
+    const books = listOf('checklist', 'Books', ['Piranesi', 'Station Eleven']);
+    books.items[0].done = true;
+    const app = await boot(stateOf([books]));
+    equal(app.doc.querySelector('#chips .chip .count').textContent, '1', 'one unticked book to start');
+
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.$('editListBtn').click();
+    await waitFor(() => app.$('listDialog').open, 'the edit dialog');
+    equal(shown(app.win, app.$('kindField')), true, 'the kind must be editable, not locked');
+
+    app.doc.querySelector('input[name="kind"][value="endless"]').checked = true;
+    app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => stored().lists[0].kind === 'endless', 'the kind change');
+
+    equal(stored().lists[0].items.length, 2, 'no item may be lost');
+    equal(stored().lists[0].items[0].done, true, 'the tick is kept, just ignored');
+    app.$('tabDecide').click();
+    equal(app.doc.querySelector('#chips .chip .count').textContent, '2', 'ticked items rejoin the pool');
+  });
+
+  test('undoing a kind change puts the list back as it was', async () => {
+    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.$('editListBtn').click();
+    app.doc.querySelector('input[name="kind"][value="endless"]').checked = true;
+    app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => stored().lists[0].kind === 'endless', 'the kind change');
+    equal(app.$('toastText').textContent, 'This list is now: Ongoing');
+    app.$('toastAction').click();
+    await waitFor(() => stored().lists[0].kind === 'todo', 'the undo');
+  });
+
+  test('picking draws a real item and announces it', async () => {
+    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up', 'Water plants'])]));
+    app.$('pickBtn').click();
+    await settled(app);
+    const what = app.$('cardWhat').textContent;
+    assert(['Wash up', 'Water plants'].includes(what), 'picked something not in the list: ' + what);
+    equal(app.$('cardFrom').textContent.trim(), 'House');
+    equal(app.$('announcer').textContent, 'Picked: ' + what + ', from House.');
+    equal(shown(app.win, app.$('pickBtn')), false, 'the pick button gives way to the card');
+  });
+
+  test('skip rerolls onto the other item rather than repeating', async () => {
+    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up', 'Water plants'])]));
+    app.$('pickBtn').click();
+    await settled(app);
+    const first = app.$('cardWhat').textContent;
+    app.$('announcer').textContent = '';
+    app.$('skipBtn').click();
+    await settled(app);
+    equal(app.$('cardWhat').textContent === first, false, 'reroll offered the same item again');
+  });
+
+  test('accepting a to-do marks it done and offers another', async () => {
+    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    app.$('pickBtn').click();
+    await settled(app);
+    app.$('doBtn').click();
+    await waitFor(() => stored().lists[0].items[0].done, 'the item to be marked done');
+    equal(app.$('doBtn').textContent, 'Pick another');
+    equal(shown(app.win, app.$('skipBtn')), false, 'nothing left to skip after accepting');
+    equal(app.$('toastText').textContent, 'Done. Nice one.');
+  });
+
+  test('accepting an ongoing item logs a session and keeps it pickable', async () => {
+    const app = await boot(stateOf([listOf('endless', 'Keep', ['Practise guitar'])]));
+    app.$('pickBtn').click();
+    await settled(app);
+    app.$('doBtn').click();
+    await waitFor(() => stored().lists[0].items[0].count === 1, 'the session to be logged');
+    const item = stored().lists[0].items[0];
+    equal(item.done, false, 'an ongoing item must never be marked done');
+    assert(item.lastDone > 0, 'lastDone must be stamped');
+    equal(app.$('toastText').textContent, 'Logged — that’s 1 time.');
+    equal(app.doc.querySelector('#chips .chip .count').textContent, '1', 'it stays in the pool');
+  });
+
+  test('accepting a collection item ticks it off and reports progress', async () => {
+    const app = await boot(stateOf([listOf('checklist', 'Books', ['Piranesi', 'Station Eleven'])]));
+    app.$('pickBtn').click();
+    await settled(app);
+    app.$('doBtn').click();
+    await waitFor(() => stored().lists[0].items.some((i) => i.done), 'the book to be ticked');
+    equal(app.$('cardMeta').textContent, 'Ticked off — 1 of 2.');
+  });
+
+  test('undo restores an accepted pick', async () => {
+    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    app.$('pickBtn').click();
+    await settled(app);
+    app.$('doBtn').click();
+    await waitFor(() => stored().lists[0].items[0].done, 'the item to be done');
+    app.$('toastAction').click();
+    await waitFor(() => stored().lists[0].items[0].done === false, 'undo to take effect');
+    equal(shown(app.win, app.$('pickBtn')), true, 'the picker comes back after undo');
+  });
+
+  test('chips scope the pool to the selected lists', async () => {
+    const app = await boot(stateOf([
+      listOf('todo', 'House', ['Wash up']),
+      listOf('checklist', 'Books', ['Piranesi']),
+    ]));
+    const chip = (name) => [...app.doc.querySelectorAll('#chips .chip')].find((c) => c.textContent.includes(name));
+    chip('Books').click();
+    equal(chip('Books').getAttribute('aria-pressed'), 'true');
+    equal(chip('Everything').getAttribute('aria-pressed'), 'false');
+    for (let i = 0; i < 4; i++) {
+      app.$('pickBtn').hidden ? app.$('skipBtn').click() : app.$('pickBtn').click();
+      await settled(app);
+      equal(app.$('cardFrom').textContent.trim(), 'Books', 'drew from outside the selection');
+      app.$('announcer').textContent = '';
+    }
+  });
+
+  test('toggling a chip keeps keyboard focus on it', async () => {
+    // Regression: re-rendering used to replace the chip buttons, dropping focus
+    // to the body the moment a keyboard user activated one.
+    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up']), listOf('todo', 'Work', ['Email'])]));
+    const target = [...app.doc.querySelectorAll('#chips .chip')].find((c) => c.textContent.includes('Work'));
+    target.focus();
+    target.click();
+    equal(app.doc.activeElement.textContent.includes('Work'), true, 'focus left the chip that was pressed');
+    equal(app.doc.activeElement.getAttribute('aria-pressed'), 'true', 'the focused chip must show its new state');
+  });
+
+  test('renaming a list updates its chip and card label', async () => {
+    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.$('editListBtn').click();
+    app.$('listName').value = 'Home jobs';
+    app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => stored().lists[0].name === 'Home jobs', 'the rename to save');
+    app.$('tabDecide').click();
+    const chip = [...app.doc.querySelectorAll('#chips .chip')][1];
+    equal(chip.textContent.includes('Home jobs'), true, 'the chip still shows the old name: ' + chip.textContent);
+  });
+
+  test('an exhausted selection explains itself instead of offering a dead button', async () => {
+    const done = listOf('todo', 'House', ['Wash up']);
+    done.items[0].done = true;
+    const app = await boot(stateOf([done, listOf('todo', 'Other', ['Something'])], ['l-House']));
+    equal(shown(app.win, app.$('poolEmpty')), true);
+    equal(shown(app.win, app.$('pickBtn')), false);
+    equal(app.$('poolEmptyTitle').textContent, 'That selection is empty');
+  });
+
+  test('items can be added, renamed and deleted, and deletion is undoable', async () => {
+    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+
+    app.$('addInput').value = 'Take the bins out';
+    app.$('addForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => stored().lists[0].items.length === 2, 'the new item');
+
+    const row = app.doc.querySelectorAll('#openItems .item')[1];
+    row.querySelector('.text').click();
+    const input = await waitFor(() => row.querySelector('.text input'), 'the inline editor');
+    input.value = 'Take the recycling out';
+    input.dispatchEvent(new app.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await waitFor(() => stored().lists[0].items[1].text === 'Take the recycling out', 'the rename');
+
+    app.doc.querySelectorAll('#openItems .item')[1].querySelector('.kill').click();
+    await waitFor(() => stored().lists[0].items.length === 1, 'the deletion');
+    app.$('toastAction').click();
+    await waitFor(() => stored().lists[0].items.length === 2, 'the undo');
+    equal(stored().lists[0].items[1].text, 'Take the recycling out', 'undo restored the wrong item');
+  });
+
+  test('ticking an item moves it into the done section', async () => {
+    const app = await boot(stateOf([listOf('checklist', 'Books', ['Piranesi', 'Station Eleven'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.doc.querySelector('#openItems .check').click();
+    await waitFor(() => app.doc.querySelectorAll('#doneItems .item').length === 1, 'the done section');
+    equal(app.doc.querySelectorAll('#openItems .item').length, 1);
+    equal(app.$('doneLabel').textContent, 'Ticked off · 1');
+    equal(app.doc.querySelector('#doneItems .check').getAttribute('aria-checked'), 'true');
+  });
+
+  test('changes survive a reload', async () => {
+    const app = await boot(stateOf([listOf('endless', 'Keep', ['Practise guitar'])]));
+    app.$('pickBtn').click();
+    await settled(app);
+    app.$('doBtn').click();
+    await waitFor(() => stored().lists[0].items[0].count === 1, 'the logged session');
+    const again = await boot(stored());
+    equal(again.doc.querySelector('#chips .chip .count').textContent, '1');
+    equal(stored().lists[0].items[0].count, 1);
+  });
+
+  test('unreadable saved data warns instead of silently starting empty', async () => {
+    const app = await boot('{ this is not json');
+    equal(shown(app.win, app.$('banner')), true, 'the user must be told');
+    equal(shown(app.win, app.$('screenDecide')), true, 'the app must still run');
+    equal(localStorage.getItem('unstuck.v1'), '{ this is not json', 'the damaged copy must be left alone');
+  });
+
+  test('saved data of the wrong shape warns instead of throwing', async () => {
+    const app = await boot({ lists: 'not an array' });
+    equal(shown(app.win, app.$('banner')), true);
+    equal(shown(app.win, app.$('onboard')), true, 'the app falls back to onboarding');
+  });
+
+  test('every visible control has an accessible name', async () => {
+    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    const unnamed = [];
+    for (const el of app.doc.querySelectorAll('button, input')) {
+      if (!shown(app.win, el) || !el.offsetParent) continue;
+      const name = (el.getAttribute('aria-label') || el.textContent || el.value || '').trim();
+      if (!name) unnamed.push(el.id || el.className);
+    }
+    equal(unnamed.join(', '), '', 'controls with no accessible name');
+  });
+
+  // ------------------------------------------------------------------ run
+
+  (async () => {
+    for (const { name, fn } of tests) {
+      try {
+        await fn();
+        record(name, null);
+      } catch (err) {
+        record(name, err);
+      }
+    }
+    localStorage.removeItem('unstuck.v1');
+    const summary = document.getElementById('summary');
+    summary.className = failed ? 'fail' : 'pass';
+    summary.innerHTML = '<strong>' + (failed ? failed + ' failing' : 'all passing') + '</strong> — '
+      + passed + ' of ' + (passed + failed) + ' checks';
+    window.__unstuckTestResults = { passed, failed };
+    document.title = (failed ? '✖ ' : '✔ ') + passed + '/' + (passed + failed) + ' — Unstuck tests';
+  })();
+})();
+</script>
+</body>
+</html>

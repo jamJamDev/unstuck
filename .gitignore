@@ -1,0 +1,10 @@
+# OS and editor junk
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Tooling
+node_modules/
+.playwright-mcp/

@@ -1,0 +1,1966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#101318">
+<meta name="description" content="Can't decide what to do? Keep your lists here and let Unstuck pick one for you.">
+<title>Unstuck</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+:root {
+  --bg: #101318;
+  --surface: #191d25;
+  --surface-2: #232935;
+  --line: #2c333f;
+  --text: #eef1f6;
+  --muted: #97a1b3;
+  --accent: #f4a13c;
+  --accent-ink: #241703;
+  --good: #56d6a0;
+  --bad: #ff7a7a;
+  --radius: 16px;
+  --tap: 44px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* The eight colours a list can be tagged with. */
+.c-amber  { --list-color: #f4a13c; }
+.c-rose   { --list-color: #f2718f; }
+.c-violet { --list-color: #a78bfa; }
+.c-sky    { --list-color: #5cb8f5; }
+.c-emerald{ --list-color: #56d6a0; }
+.c-teal   { --list-color: #4dd0c4; }
+.c-orange { --list-color: #ff8a5c; }
+.c-indigo { --list-color: #8b9cf7; }
+
+* { box-sizing: border-box; }
+
+/* Several elements below set an explicit display, which would otherwise beat
+   the hidden attribute's UA default. Toggling `hidden` must always win. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+body { display: flex; flex-direction: column; }
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; }
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Chrome: top bar, screens, tab bar ---------- */
+
+#app {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-top) + 10px) calc(var(--safe-right) + 14px) 10px calc(var(--safe-left) + 14px);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.topbar h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
+.icon-btn {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 20px;
+}
+.icon-btn:hover { background: var(--surface); color: var(--text); }
+
+.back-btn {
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 6px;
+  background: none;
+  border: 0;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 15px;
+}
+.back-btn:hover { background: var(--surface); color: var(--text); }
+
+main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 16px calc(var(--safe-right) + 14px) 24px calc(var(--safe-left) + 14px);
+}
+.screen[hidden] { display: none; }
+
+.tabbar {
+  display: flex;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  padding-bottom: var(--safe-bottom);
+}
+
+.tab {
+  flex: 1;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.tab .glyph { font-size: 19px; line-height: 1; }
+.tab[aria-selected="true"] { color: var(--accent); }
+
+/* ---------- Decide screen ---------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.chip {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 550;
+}
+.chip .dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--list-color, var(--muted));
+  flex: none;
+}
+.chip[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--list-color, var(--accent)) 18%, var(--surface));
+  border-color: color-mix(in srgb, var(--list-color, var(--accent)) 55%, var(--line));
+  color: var(--text);
+}
+.chip .count { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 500; }
+
+.stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 18px 0;
+  min-height: 320px;
+}
+
+.pick-btn {
+  width: min(100%, 300px);
+  aspect-ratio: 1 / 1;
+  max-height: 46vh;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, #ffc06a, var(--accent) 62%, #d9791f);
+  color: var(--accent-ink);
+  font-size: 24px;
+  font-weight: 750;
+  letter-spacing: 0.2px;
+  line-height: 1.25;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset, 0 18px 50px -18px rgba(244,161,60,0.65);
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+.pick-btn span { display: block; font-size: 15px; font-weight: 600; opacity: 0.72; }
+.pick-btn:hover { transform: scale(1.02); }
+.pick-btn:active { transform: scale(0.97); }
+.pick-btn[disabled] {
+  background: var(--surface-2);
+  color: var(--muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* Result card */
+.card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--list-color, var(--accent));
+  border-radius: var(--radius);
+  padding: 22px 20px 18px;
+  position: relative;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.card[hidden] { display: none; }
+.card.settling { animation: settle 320ms cubic-bezier(.2,.9,.3,1.2); }
+@keyframes settle {
+  from { transform: scale(0.94); opacity: 0.4; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+.card .from {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--list-color, var(--accent));
+}
+.card .from .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+
+.card .what {
+  margin: 12px 0 4px;
+  font-size: 27px;
+  line-height: 1.25;
+  font-weight: 680;
+  overflow-wrap: anywhere;
+}
+
+.card .meta {
+  color: var(--muted);
+  font-size: 14px;
+  min-height: 21px;
+}
+
+.card .actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn {
+  flex: 1;
+  min-height: var(--tap);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 620;
+  padding: 0 14px;
+}
+.btn:hover { border-color: #3c4553; }
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: none; }
+.btn.danger { color: var(--bad); }
+.btn[disabled] { opacity: 0.42; cursor: not-allowed; filter: none; }
+
+.swipe-hint {
+  margin: 14px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Swipe affordance overlays, revealed as the card is dragged. */
+.card .verdict {
+  position: absolute;
+  top: 16px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 2px solid currentColor;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.card .verdict.skip { left: 16px; color: var(--muted); transform: rotate(-8deg); }
+.card .verdict.go   { right: 16px; color: var(--good); transform: rotate(8deg); }
+
+.card.done-state { border-top-color: var(--good); }
+
+.pool-note {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  min-height: 20px;
+}
+
+/* Empty / onboarding states */
+.empty {
+  text-align: center;
+  max-width: 380px;
+}
+.empty h3 { margin: 0 0 8px; font-size: 20px; }
+.empty p { margin: 0 0 18px; color: var(--muted); }
+.empty .actions { display: flex; flex-direction: column; gap: 10px; }
+.empty .btn { flex: none; }
+
+/* ---------- Lists screen ---------- */
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.section-head h2 { margin: 0; font-size: 17px; font-weight: 650; }
+.section-head .sub { color: var(--muted); font-size: 13px; }
+
+.list-grid { display: flex; flex-direction: column; gap: 10px; }
+
+.list-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--list-color, var(--accent));
+  border-radius: var(--radius);
+  color: inherit;
+}
+.list-card:hover { border-color: #3c4553; border-left-color: var(--list-color, var(--accent)); }
+.list-card .body { flex: 1; min-width: 0; }
+.list-card .name {
+  font-size: 16px;
+  font-weight: 640;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.list-card .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.list-card .chev { color: var(--muted); font-size: 20px; flex: none; }
+
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  flex: none;
+}
+
+.progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 8px;
+}
+.progress > i {
+  display: block;
+  height: 100%;
+  background: var(--list-color, var(--accent));
+  border-radius: 999px;
+}
+
+/* ---------- List detail ---------- */
+
+.detail-head { margin-bottom: 14px; }
+.detail-head .title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 23px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.detail-head .title .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--list-color); flex: none; }
+.detail-head .kind { color: var(--muted); font-size: 14px; margin-top: 6px; }
+
+.add-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.add-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 0 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.add-row input::placeholder { color: #6d7688; }
+.add-row input:focus { border-color: var(--list-color, var(--accent)); outline: none; }
+.add-row .btn { flex: none; width: auto; }
+
+.items { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px 7px 6px;
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+.item:hover { border-color: var(--line); }
+
+.check {
+  width: 30px; height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 2px solid #48525f;
+  background: none;
+  color: var(--accent-ink);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0;
+}
+.check[aria-checked="true"] {
+  background: var(--list-color, var(--accent));
+  border-color: var(--list-color, var(--accent));
+}
+
+.tally {
+  min-width: 34px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px;
+}
+
+.item .text {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  text-align: left;
+  padding: 6px 2px;
+  overflow-wrap: anywhere;
+}
+.item .text:hover { border-bottom-color: var(--line); }
+.item.checked .text { color: var(--muted); text-decoration: line-through; }
+.item .text input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--list-color, var(--accent));
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.item .when { color: var(--muted); font-size: 12px; flex: none; }
+
+.item .kill {
+  min-width: 32px; min-height: 32px;
+  flex: none;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  color: #6d7688;
+  font-size: 17px;
+  line-height: 1;
+}
+.item .kill:hover { color: var(--bad); background: var(--surface-2); }
+
+.done-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 22px 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.done-head button {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  min-height: 32px;
+  padding: 0 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.done-head button:hover { color: var(--text); }
+
+.hint-empty {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 26px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.detail-foot { margin-top: auto; padding-top: 26px; display: flex; gap: 10px; }
+
+/* ---------- Dialogs ---------- */
+
+dialog {
+  width: min(440px, calc(100vw - 28px));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text);
+}
+dialog::backdrop { background: rgba(6,8,12,0.66); }
+dialog .dlg-body {
+  padding: 20px;
+  /* Tall dialogs scroll inside themselves rather than off a short screen. */
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+dialog h2 { margin: 0 0 4px; font-size: 19px; }
+dialog .dlg-sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+dialog label.field { display: block; margin-bottom: 16px; }
+dialog label.field > span { display: block; font-size: 13px; font-weight: 620; color: var(--muted); margin-bottom: 6px; }
+dialog input[type="text"] {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+dialog input[type="text"]:focus { border-color: var(--accent); outline: none; }
+dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
+
+.kind-picker { display: flex; flex-direction: column; gap: 8px; }
+.kind-opt {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.kind-opt input { margin: 3px 0 0; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+.kind-opt strong { display: block; font-size: 15px; }
+.kind-opt small { color: var(--muted); font-size: 13px; }
+.kind-opt:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
+.kind-opt:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.field-note {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.starters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(46vh, 340px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.starter {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--list-color);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: inherit;
+}
+.starter .tick {
+  width: 22px; height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 2px solid #48525f;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--accent-ink);
+}
+.starter[aria-pressed="true"] { border-color: var(--list-color); background: color-mix(in srgb, var(--list-color) 13%, var(--surface-2)); }
+.starter[aria-pressed="true"] .tick { background: var(--list-color); border-color: var(--list-color); }
+.starter .body { flex: 1; min-width: 0; }
+.starter .name { font-size: 15px; font-weight: 620; display: flex; align-items: center; gap: 8px; }
+.starter .sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--list-color);
+  padding: 0;
+}
+.swatch[aria-pressed="true"] { border-color: var(--text); box-shadow: 0 0 0 2px var(--surface) inset; }
+
+/* ---------- Toast & banner ---------- */
+
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 72px);
+  transform: translate(-50%, 20px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 28px);
+  padding: 11px 14px;
+  background: #2b3341;
+  border: 1px solid #3c4553;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px -12px rgba(0,0,0,0.8);
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+  z-index: 40;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#toast button {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font-weight: 700;
+  min-height: 32px;
+  padding: 0 4px;
+}
+
+#banner {
+  padding: 11px 14px;
+  background: #46201f;
+  border-bottom: 1px solid #7a3330;
+  color: #ffd8d6;
+  font-size: 14px;
+}
+#banner[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="banner" role="alert" hidden></div>
+
+<div id="app">
+  <header class="topbar">
+    <button id="backBtn" class="back-btn" hidden>&#8249; Lists</button>
+    <h1 id="topTitle">Unstuck</h1>
+    <button id="dataBtn" class="icon-btn" aria-label="Backup and data options" title="Backup and data">&#9881;</button>
+  </header>
+
+  <main>
+    <!-- ============ DECIDE ============ -->
+    <section id="screenDecide" class="screen" aria-labelledby="decideHeading">
+      <h2 id="decideHeading" class="sr-only">Decide what to do</h2>
+
+      <div id="chips" class="chips" role="group" aria-label="Which lists to pick from"></div>
+
+      <div id="stage" class="stage">
+        <div id="onboard" class="empty" hidden>
+          <h3>Nothing here yet</h3>
+          <p>Unstuck holds your lists and picks one thing at random, so you don't have to choose.</p>
+          <div class="actions">
+            <button id="seedBtn" class="btn primary">Browse starter lists</button>
+            <button id="scratchBtn" class="btn">Make my own list</button>
+          </div>
+        </div>
+
+        <div id="poolEmpty" class="empty" hidden>
+          <h3 id="poolEmptyTitle">Nothing to pick from</h3>
+          <p id="poolEmptyBody"></p>
+          <div class="actions">
+            <button id="poolEmptyBtn" class="btn">Go to lists</button>
+          </div>
+        </div>
+
+        <button id="pickBtn" class="pick-btn">Pick something<span>for me</span></button>
+
+        <div id="card" class="card" role="group" aria-labelledby="cardWhat" tabindex="-1" hidden>
+          <span class="verdict skip" aria-hidden="true">SKIP</span>
+          <span class="verdict go" aria-hidden="true">DOING IT</span>
+          <div id="cardFrom" class="from"><span class="dot"></span><span></span></div>
+          <div id="cardWhat" class="what"></div>
+          <div id="cardMeta" class="meta"></div>
+          <div class="actions">
+            <button id="skipBtn" class="btn">Skip</button>
+            <button id="doBtn" class="btn primary">I'm doing it</button>
+          </div>
+          <p id="swipeHint" class="swipe-hint"></p>
+        </div>
+      </div>
+
+      <p id="poolNote" class="pool-note"></p>
+      <p id="announcer" class="sr-only" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- ============ LISTS ============ -->
+    <section id="screenLists" class="screen" aria-labelledby="listsHeading" hidden>
+      <div class="section-head">
+        <h2 id="listsHeading">Your lists</h2>
+        <span id="listsSub" class="sub"></span>
+      </div>
+      <div id="listGrid" class="list-grid"></div>
+      <p id="listsEmpty" class="hint-empty" hidden>No lists yet. Add one below.</p>
+      <div class="detail-foot">
+        <button id="starterBtn" class="btn">Starter lists</button>
+        <button id="newListBtn" class="btn primary">New list</button>
+      </div>
+    </section>
+
+    <!-- ============ LIST DETAIL ============ -->
+    <section id="screenList" class="screen" aria-labelledby="detailTitle" hidden>
+      <div class="detail-head">
+        <div id="detailTitle" class="title"><span class="dot"></span><span></span></div>
+        <div id="detailKind" class="kind"></div>
+      </div>
+
+      <form id="addForm" class="add-row">
+        <input id="addInput" type="text" placeholder="Add something" aria-label="New item" autocomplete="off" maxlength="200">
+        <button class="btn primary" type="submit">Add</button>
+      </form>
+
+      <ul id="openItems" class="items"></ul>
+      <p id="detailEmpty" class="hint-empty" hidden></p>
+
+      <div id="doneSection" hidden>
+        <div class="done-head">
+          <span id="doneLabel">Done</span>
+          <button id="clearDoneBtn" type="button">Clear</button>
+        </div>
+        <ul id="doneItems" class="items"></ul>
+      </div>
+
+      <div class="detail-foot">
+        <button id="editListBtn" class="btn">Rename &amp; colour</button>
+        <button id="deleteListBtn" class="btn danger">Delete list</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" id="tabDecide" aria-selected="true" aria-controls="screenDecide">
+      <span class="glyph" aria-hidden="true">&#9673;</span>Decide
+    </button>
+    <button class="tab" role="tab" id="tabLists" aria-selected="false" aria-controls="screenLists">
+      <span class="glyph" aria-hidden="true">&#9776;</span>Lists
+    </button>
+  </nav>
+</div>
+
+<div id="toast" role="status" aria-live="polite">
+  <span id="toastText"></span>
+  <button id="toastAction" type="button" hidden></button>
+</div>
+
+<dialog id="listDialog" aria-labelledby="listDialogTitle">
+  <form method="dialog" class="dlg-body" id="listForm">
+    <h2 id="listDialogTitle">New list</h2>
+    <p class="dlg-sub" id="listDialogSub">What kind of list is this?</p>
+
+    <label class="field">
+      <span>Name</span>
+      <input id="listName" type="text" maxlength="60" required autocomplete="off" placeholder="Books to read">
+    </label>
+
+    <div class="field" id="kindField">
+      <span>How does finishing work?</span>
+      <div class="kind-picker" role="radiogroup" aria-label="Kind of list">
+        <label class="kind-opt">
+          <input type="radio" name="kind" value="todo" checked>
+          <span><strong>To-do</strong><small>Jobs that go away once they're done. Chores, errands, admin.</small></span>
+        </label>
+        <label class="kind-opt">
+          <input type="radio" name="kind" value="checklist">
+          <span><strong>Collection</strong><small>Things you tick off and keep as a record. Books, films, places.</small></span>
+        </label>
+        <label class="kind-opt">
+          <input type="radio" name="kind" value="endless">
+          <span><strong>Ongoing</strong><small>Never finished, just done again. Practise guitar, study Spanish.</small></span>
+        </label>
+      </div>
+      <p class="field-note" id="kindNote" hidden></p>
+    </div>
+
+    <div class="field">
+      <span>Colour</span>
+      <div class="swatches" id="swatches" role="group" aria-label="List colour"></div>
+    </div>
+
+    <div class="dlg-actions">
+      <button type="button" class="btn ghost" id="listCancel">Cancel</button>
+      <button type="submit" class="btn primary" id="listSave">Create list</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="starterDialog" aria-labelledby="starterDialogTitle">
+  <div class="dlg-body">
+    <h2 id="starterDialogTitle">Starter lists</h2>
+    <p class="dlg-sub">Pick any that look useful. Rename, edit, or delete them freely afterwards — nothing here is fixed.</p>
+    <div class="starters" id="starterOptions" role="group" aria-label="Starter lists"></div>
+    <div class="dlg-actions">
+      <button type="button" class="btn ghost" id="starterCancel">Cancel</button>
+      <button type="button" class="btn primary" id="starterAdd">Add lists</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dataDialog" aria-labelledby="dataDialogTitle">
+  <div class="dlg-body">
+    <h2 id="dataDialogTitle">Backup &amp; data</h2>
+    <p class="dlg-sub">Everything lives on this device only. Nothing is ever uploaded.</p>
+    <div class="dlg-actions" style="flex-direction: column; margin-top: 4px;">
+      <button class="btn" id="exportBtn">Export a backup file</button>
+      <button class="btn" id="importBtn">Restore from a backup</button>
+      <button class="btn danger" id="resetBtn">Erase everything</button>
+      <button class="btn ghost" id="dataClose">Close</button>
+    </div>
+    <input id="importFile" type="file" accept="application/json,.json" class="sr-only" tabindex="-1" aria-hidden="true">
+  </div>
+</dialog>
+
+<script src="./logic.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+
+  const L = window.UnstuckLogic;
+  if (!L) {
+    const el = $('banner');
+    el.textContent = 'Unstuck could not start: logic.js failed to load.';
+    el.hidden = false;
+    throw new Error('Unstuck: logic.js is missing');
+  }
+
+  const {
+    STORE_KEY, COLORS, KIND_LABEL,
+    emptyState, migrate, newItem, newList,
+    pickableCount, plural, relativeDay, listSummary,
+  } = L;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const coarsePointer = window.matchMedia('(pointer: coarse)');
+
+  const swipeHintText = () => coarsePointer.matches
+    ? 'Swipe left to skip, right to accept'
+    : 'Drag the card, or press ← and →';
+
+  // ---------------------------------------------------------------- state
+
+  /**
+   * lists[].kind drives everything downstream:
+   *   todo      — done items leave the pool and get tucked into a "Done" section
+   *   checklist — done items leave the pool but stay visible as a record, with progress
+   *   endless   — never done; picking one logs a session and it stays in the pool
+   */
+  let state = emptyState();
+  let ui = { tab: 'decide', openListId: null, editingListId: null, draftColor: COLORS[0] };
+  let session = { shown: new Set(), current: null, settled: false, gen: 0 };
+  let pendingUndo = null;
+  let toastTimer = 0;
+
+  const listById = (id) => L.listById(state, id);
+  const activeLists = () => L.activeLists(state);
+  const pool = () => L.pool(state);
+
+  // ------------------------------------------------------------ persistence
+
+  function showBanner(message) {
+    const el = $('banner');
+    el.textContent = message;
+    el.hidden = false;
+  }
+
+  function load() {
+    let raw;
+    try {
+      raw = localStorage.getItem(STORE_KEY);
+    } catch (err) {
+      console.error('Unstuck: localStorage is unavailable', err);
+      showBanner('This browser is blocking storage, so your lists will vanish when you close the tab.');
+      return;
+    }
+    if (!raw) return;
+
+    // Keep a damaged payload exactly where it is — a backup export can still
+    // rescue it — and say so, rather than starting up silently empty.
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      console.error('Unstuck: saved data could not be parsed', err);
+      showBanner('Your saved lists could not be read. Nothing has been deleted; open Backup & data to export the raw copy.');
+      return;
+    }
+    try {
+      state = migrate(parsed);
+    } catch (err) {
+      console.error('Unstuck: saved data is not in the expected shape', err);
+      showBanner('Your saved lists are in an unrecognised format. Nothing has been deleted; open Backup & data to export the raw copy.');
+    }
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      const el = $('banner');
+      // A working save clears a previous save-failure warning, and only that one.
+      if (el.dataset.cause === 'save') {
+        el.hidden = true;
+        delete el.dataset.cause;
+      }
+    } catch (err) {
+      console.error('Unstuck: could not save', err);
+      const el = $('banner');
+      el.dataset.cause = 'save';
+      showBanner('Your last change could not be saved — this device is out of storage space, or storage is blocked.');
+    }
+  }
+
+  // ----------------------------------------------------------------- toast
+
+  function toast(message, undo) {
+    const box = $('toast');
+    const action = $('toastAction');
+    $('toastText').textContent = message;
+    pendingUndo = undo || null;
+    action.hidden = !pendingUndo;
+    action.textContent = 'Undo';
+    box.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      box.classList.remove('show');
+      pendingUndo = null;
+    }, pendingUndo ? 6000 : 3000);
+  }
+
+  $('toastAction').addEventListener('click', () => {
+    if (!pendingUndo) return;
+    const fn = pendingUndo;
+    pendingUndo = null;
+    $('toast').classList.remove('show');
+    clearTimeout(toastTimer);
+    fn();
+    save();
+    renderAll();
+  });
+
+  // ------------------------------------------------------------ navigation
+
+  function setTab(tab) {
+    ui.tab = tab;
+    if (tab === 'decide') ui.openListId = null;
+    renderAll();
+    const target = tab === 'decide' ? $('tabDecide') : $('tabLists');
+    target.focus();
+  }
+
+  function openList(id) {
+    ui.openListId = id;
+    ui.tab = 'lists';
+    renderAll();
+    document.querySelector('main').scrollTop = 0;
+  }
+
+  $('tabDecide').addEventListener('click', () => setTab('decide'));
+  $('tabLists').addEventListener('click', () => setTab('lists'));
+  $('backBtn').addEventListener('click', () => { ui.openListId = null; renderAll(); });
+
+  // ------------------------------------------------------------- rendering
+
+  function renderAll() {
+    const onDetail = Boolean(ui.openListId && listById(ui.openListId));
+    if (ui.openListId && !onDetail) ui.openListId = null;
+
+    $('screenDecide').hidden = ui.tab !== 'decide';
+    $('screenLists').hidden = !(ui.tab === 'lists' && !onDetail);
+    $('screenList').hidden = !(ui.tab === 'lists' && onDetail);
+
+    $('tabDecide').setAttribute('aria-selected', String(ui.tab === 'decide'));
+    $('tabLists').setAttribute('aria-selected', String(ui.tab === 'lists'));
+
+    $('backBtn').hidden = !onDetail;
+    $('topTitle').textContent = ui.tab === 'decide' ? 'Unstuck' : (onDetail ? '' : 'Unstuck');
+
+    renderDecide();
+    renderLists();
+    if (onDetail) renderDetail(listById(ui.openListId));
+  }
+
+  function renderDecide() {
+    const hasLists = state.lists.length > 0;
+    const p = pool();
+
+    $('onboard').hidden = hasLists;
+    $('chips').hidden = !hasLists;
+
+    const showEmptyPool = hasLists && p.length === 0;
+    $('poolEmpty').hidden = !showEmptyPool;
+
+    const cardOpen = session.current !== null;
+    $('pickBtn').hidden = !hasLists || showEmptyPool || cardOpen;
+    $('card').hidden = !cardOpen;
+
+    if (showEmptyPool) {
+      const scoped = state.selection.length > 0;
+      $('poolEmptyTitle').textContent = scoped ? 'That selection is empty' : 'Nothing to pick from';
+      $('poolEmptyBody').textContent = scoped
+        ? 'Everything in the lists you picked is already done. Choose another list, or add something new.'
+        : 'Add a few things to your lists and Unstuck can start choosing for you.';
+    }
+
+    renderChips();
+
+    if (!hasLists || showEmptyPool) {
+      $('poolNote').textContent = '';
+    } else if (cardOpen) {
+      $('poolNote').textContent = '';
+    } else {
+      const listCount = activeLists().length;
+      const scope = state.selection.length ? plural(listCount, 'list', 'lists') : 'all your lists';
+      $('poolNote').textContent = plural(p.length, 'thing', 'things') + ' in the hat, across ' + scope + '.';
+    }
+  }
+
+  function renderChips() {
+    const box = $('chips');
+    const wanted = ['*'].concat(state.lists.map((l) => l.id));
+    const current = [...box.children].map((c) => c.dataset.chip);
+
+    // Toggling a chip re-renders; rebuilding the buttons would throw away the
+    // keyboard focus sitting on the one just pressed, so only redraw when the
+    // set of lists itself has changed.
+    const sameChips = current.length === wanted.length && current.every((id, i) => id === wanted[i]);
+    if (!sameChips) {
+      box.textContent = '';
+      if (!state.lists.length) return;
+
+      const all = document.createElement('button');
+      all.type = 'button';
+      all.className = 'chip';
+      all.dataset.chip = '*';
+      all.textContent = 'Everything';
+      all.addEventListener('click', () => {
+        state.selection = [];
+        resetSession();
+        save();
+        renderDecide();
+      });
+      box.appendChild(all);
+
+      for (const list of state.lists) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.dataset.chip = list.id;
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        chip.appendChild(dot);
+        chip.appendChild(document.createTextNode(list.name));
+        const count = document.createElement('span');
+        count.className = 'count';
+        chip.appendChild(count);
+        chip.addEventListener('click', () => toggleSelection(list.id));
+        box.appendChild(chip);
+      }
+    }
+
+    if (!state.lists.length) return;
+    box.firstElementChild.setAttribute('aria-pressed', String(state.selection.length === 0));
+    state.lists.forEach((list, i) => {
+      const chip = box.children[i + 1];
+      chip.className = 'chip c-' + list.color;
+      chip.setAttribute('aria-pressed', String(state.selection.includes(list.id)));
+      // childNodes: [dot, name text, count] — a rename must reach the text node.
+      chip.childNodes[1].nodeValue = list.name;
+      chip.lastElementChild.textContent = String(pickableCount(list));
+    });
+  }
+
+  function toggleSelection(id) {
+    const at = state.selection.indexOf(id);
+    if (at === -1) state.selection.push(id);
+    else state.selection.splice(at, 1);
+    resetSession();
+    save();
+    renderDecide();
+  }
+
+  function renderLists() {
+    const grid = $('listGrid');
+    grid.textContent = '';
+    $('listsEmpty').hidden = state.lists.length > 0;
+
+    const total = state.lists.reduce((n, l) => n + pickableCount(l), 0);
+    $('listsSub').textContent = state.lists.length
+      ? plural(total, 'thing', 'things') + ' to pick from'
+      : '';
+
+    for (const list of state.lists) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'list-card c-' + list.color;
+      card.addEventListener('click', () => openList(list.id));
+
+      const body = document.createElement('div');
+      body.className = 'body';
+
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.appendChild(document.createTextNode(list.name));
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = KIND_LABEL[list.kind];
+      name.appendChild(badge);
+      body.appendChild(name);
+
+      const sub = document.createElement('div');
+      sub.className = 'sub';
+      sub.textContent = listSummary(list);
+      body.appendChild(sub);
+
+      if (list.kind === 'checklist' && list.items.length) {
+        const doneCount = list.items.filter((it) => it.done).length;
+        const bar = document.createElement('div');
+        bar.className = 'progress';
+        const fill = document.createElement('i');
+        fill.style.width = Math.round((doneCount / list.items.length) * 100) + '%';
+        bar.appendChild(fill);
+        body.appendChild(bar);
+      }
+
+      card.appendChild(body);
+      const chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.setAttribute('aria-hidden', 'true');
+      chev.textContent = '›';
+      card.appendChild(chev);
+      grid.appendChild(card);
+    }
+  }
+
+  function renderDetail(list) {
+    const title = $('detailTitle');
+    title.className = 'title c-' + list.color;
+    title.lastElementChild.textContent = list.name;
+
+    $('detailKind').textContent = {
+      todo: 'To-do · finished things move out of the way',
+      checklist: 'Collection · ticked things stay as a record',
+      endless: 'Ongoing · nothing is ever finished, it just gets done again',
+    }[list.kind];
+
+    $('screenList').className = 'screen c-' + list.color;
+    $('addInput').placeholder = {
+      todo: 'Add a job',
+      checklist: 'Add something to tick off',
+      endless: 'Add something you keep coming back to',
+    }[list.kind];
+
+    const open = list.kind === 'endless' ? list.items : list.items.filter((it) => !it.done);
+    const done = list.kind === 'endless' ? [] : list.items.filter((it) => it.done);
+
+    renderItems($('openItems'), list, open);
+
+    const emptyMsg = $('detailEmpty');
+    if (!list.items.length) {
+      emptyMsg.hidden = false;
+      emptyMsg.textContent = 'Nothing in here yet. Add the first thing above.';
+    } else if (!open.length) {
+      emptyMsg.hidden = false;
+      emptyMsg.textContent = list.kind === 'checklist'
+        ? 'Every one ticked off. Nothing left for Unstuck to pick here.'
+        : 'All clear. Nothing left in this list.';
+    } else {
+      emptyMsg.hidden = true;
+    }
+
+    $('doneSection').hidden = done.length === 0;
+    if (done.length) {
+      $('doneLabel').textContent = (list.kind === 'checklist' ? 'Ticked off' : 'Done') + ' · ' + done.length;
+      $('clearDoneBtn').textContent = list.kind === 'checklist' ? 'Untick all' : 'Clear these';
+      renderItems($('doneItems'), list, done);
+    }
+  }
+
+  function renderItems(container, list, items) {
+    container.textContent = '';
+    for (const item of items) {
+      container.appendChild(renderItemRow(list, item));
+    }
+  }
+
+  function renderItemRow(list, item) {
+    const row = document.createElement('li');
+    row.className = 'item' + (item.done ? ' checked' : '');
+
+    if (list.kind === 'endless') {
+      const tally = document.createElement('button');
+      tally.type = 'button';
+      tally.className = 'tally';
+      tally.textContent = item.count + '×';
+      tally.title = 'Log another session';
+      tally.setAttribute('aria-label', 'Log another session of ' + item.text + '. Done ' + plural(item.count, 'time', 'times') + ' so far.');
+      tally.addEventListener('click', () => {
+        logSession(list, item);
+        save();
+        renderAll();
+        toast('Logged. That’s ' + plural(item.count, 'time', 'times') + '.');
+      });
+      row.appendChild(tally);
+    } else {
+      const check = document.createElement('button');
+      check.type = 'button';
+      check.className = 'check';
+      check.setAttribute('role', 'checkbox');
+      check.setAttribute('aria-checked', String(item.done));
+      check.setAttribute('aria-label', item.text);
+      check.textContent = item.done ? '✓' : '';
+      check.addEventListener('click', () => {
+        setDone(item, !item.done);
+        save();
+        renderAll();
+      });
+      row.appendChild(check);
+    }
+
+    const text = document.createElement('button');
+    text.type = 'button';
+    text.className = 'text';
+    text.textContent = item.text;
+    text.title = 'Tap to edit';
+    text.setAttribute('aria-label', 'Edit: ' + item.text);
+    text.addEventListener('click', () => beginEdit(row, text, item));
+    row.appendChild(text);
+
+    if (list.kind === 'endless' && item.lastDone) {
+      const when = document.createElement('span');
+      when.className = 'when';
+      when.textContent = relativeDay(item.lastDone);
+      row.appendChild(when);
+    } else if (item.done && item.doneAt) {
+      const when = document.createElement('span');
+      when.className = 'when';
+      when.textContent = relativeDay(item.doneAt);
+      row.appendChild(when);
+    }
+
+    const kill = document.createElement('button');
+    kill.type = 'button';
+    kill.className = 'kill';
+    kill.textContent = '×';
+    kill.setAttribute('aria-label', 'Delete: ' + item.text);
+    kill.addEventListener('click', () => deleteItem(list, item));
+    row.appendChild(kill);
+
+    return row;
+  }
+
+  function beginEdit(row, textBtn, item) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = item.text;
+    input.maxLength = 200;
+    input.setAttribute('aria-label', 'Item text');
+
+    let closed = false;
+    const commit = (keep) => {
+      if (closed) return;
+      closed = true;
+      const next = input.value.trim();
+      if (keep && next && next !== item.text) {
+        item.text = next;
+        save();
+      }
+      renderAll();
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); commit(false); }
+    });
+    input.addEventListener('blur', () => commit(true));
+
+    textBtn.textContent = '';
+    textBtn.appendChild(input);
+    input.focus();
+    input.select();
+  }
+
+  function setDone(item, done) {
+    item.done = done;
+    item.doneAt = done ? Date.now() : 0;
+  }
+
+  function logSession(list, item) {
+    item.count += 1;
+    item.lastDone = Date.now();
+  }
+
+  function deleteItem(list, item) {
+    const at = list.items.indexOf(item);
+    if (at === -1) return;
+    list.items.splice(at, 1);
+    if (session.current && session.current.item.id === item.id) closeCard();
+    save();
+    renderAll();
+    toast('Deleted “' + item.text + '”', () => { list.items.splice(at, 0, item); });
+  }
+
+  // --------------------------------------------------------- detail actions
+
+  $('addForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const list = listById(ui.openListId);
+    if (!list) return;
+    const text = $('addInput').value.trim();
+    if (!text) return;
+    list.items.push(newItem(text));
+    $('addInput').value = '';
+    save();
+    renderAll();
+    $('addInput').focus();
+  });
+
+  $('clearDoneBtn').addEventListener('click', () => {
+    const list = listById(ui.openListId);
+    if (!list) return;
+    if (list.kind === 'checklist') {
+      const wasDone = list.items.filter((it) => it.done).map((it) => ({ item: it, at: it.doneAt }));
+      if (!wasDone.length) return;
+      wasDone.forEach(({ item }) => setDone(item, false));
+      save();
+      renderAll();
+      toast('Unticked ' + plural(wasDone.length, 'thing', 'things'), () => {
+        wasDone.forEach(({ item, at }) => { item.done = true; item.doneAt = at; });
+      });
+    } else {
+      const removed = list.items.filter((it) => it.done);
+      if (!removed.length) return;
+      const snapshot = list.items.slice();
+      list.items = list.items.filter((it) => !it.done);
+      save();
+      renderAll();
+      toast('Cleared ' + plural(removed.length, 'finished thing', 'finished things'), () => {
+        list.items = snapshot;
+      });
+    }
+  });
+
+  $('deleteListBtn').addEventListener('click', () => {
+    const list = listById(ui.openListId);
+    if (!list) return;
+    const at = state.lists.indexOf(list);
+    const selectedAt = state.selection.indexOf(list.id);
+    state.lists.splice(at, 1);
+    if (selectedAt !== -1) state.selection.splice(selectedAt, 1);
+    if (session.current && session.current.list.id === list.id) closeCard();
+    ui.openListId = null;
+    save();
+    renderAll();
+    toast('Deleted “' + list.name + '” and everything in it', () => {
+      state.lists.splice(at, 0, list);
+      if (selectedAt !== -1) state.selection.splice(selectedAt, 0, list.id);
+    });
+  });
+
+  // ----------------------------------------------------------- list dialog
+
+  function buildSwatches() {
+    const box = $('swatches');
+    box.textContent = '';
+    for (const color of COLORS) {
+      const sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'swatch c-' + color;
+      sw.setAttribute('aria-label', color);
+      sw.setAttribute('aria-pressed', String(color === ui.draftColor));
+      sw.addEventListener('click', () => {
+        ui.draftColor = color;
+        for (const other of box.children) {
+          other.setAttribute('aria-pressed', String(other === sw));
+        }
+      });
+      box.appendChild(sw);
+    }
+  }
+
+  function openListDialog(list) {
+    ui.editingListId = list ? list.id : null;
+    ui.draftColor = list ? list.color : COLORS[state.lists.length % COLORS.length];
+    $('listDialogTitle').textContent = list ? 'Edit list' : 'New list';
+    $('listDialogSub').textContent = list
+      ? 'Change anything here at any time — the name, the colour, or how finishing works.'
+      : 'Name it after what it is about; the kind decides how finishing works.';
+    $('listName').value = list ? list.name : '';
+    $('listSave').textContent = list ? 'Save' : 'Create list';
+    const checked = document.querySelector('input[name="kind"][value="' + (list ? list.kind : 'todo') + '"]');
+    if (checked) checked.checked = true;
+    // Switching kind only changes how items are read, so say so plainly.
+    const note = $('kindNote');
+    note.hidden = !list;
+    if (list) {
+      note.textContent = 'Switching this keeps everything in the list. Ticked items rejoin the pool as Ongoing, '
+        + 'and go back to being ticked if you switch back. Session counts are kept either way.';
+    }
+    buildSwatches();
+    $('listDialog').showModal();
+    $('listName').focus();
+  }
+
+  $('newListBtn').addEventListener('click', () => openListDialog(null));
+  $('editListBtn').addEventListener('click', () => {
+    const list = listById(ui.openListId);
+    if (list) openListDialog(list);
+  });
+  $('listCancel').addEventListener('click', () => $('listDialog').close());
+
+  $('listForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('listName').value.trim();
+    if (!name) return;
+    const kindInput = document.querySelector('input[name="kind"]:checked');
+    const existing = ui.editingListId ? listById(ui.editingListId) : null;
+
+    if (existing) {
+      const before = { name: existing.name, color: existing.color, kind: existing.kind };
+      existing.name = name;
+      existing.color = ui.draftColor;
+      existing.kind = kindInput ? kindInput.value : existing.kind;
+      // A kind change alters the pool, so any card drawn under the old rules is stale.
+      if (before.kind !== existing.kind) resetSession();
+      save();
+      $('listDialog').close();
+      renderAll();
+      if (before.kind !== existing.kind) {
+        toast('This list is now: ' + KIND_LABEL[existing.kind], () => {
+          Object.assign(existing, before);
+          resetSession();
+        });
+      }
+      return;
+    }
+
+    const list = newList(name, kindInput ? kindInput.value : 'todo', ui.draftColor);
+    state.lists.push(list);
+    save();
+    $('listDialog').close();
+    openList(list.id);
+    $('addInput').focus();
+  });
+
+  // -------------------------------------------------------- starter lists
+
+  const chosenStarters = new Set();
+
+  function openStarterDialog() {
+    chosenStarters.clear();
+    // Nothing is preselected: adding lists you did not ask for is the same
+    // clutter the app exists to cut through.
+    const box = $('starterOptions');
+    box.textContent = '';
+
+    L.STARTER_LISTS.forEach((spec, i) => {
+      const opt = document.createElement('button');
+      opt.type = 'button';
+      opt.className = 'starter c-' + spec.color;
+      opt.setAttribute('aria-pressed', 'false');
+
+      const tick = document.createElement('span');
+      tick.className = 'tick';
+      tick.setAttribute('aria-hidden', 'true');
+      opt.appendChild(tick);
+
+      const body = document.createElement('span');
+      body.className = 'body';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.appendChild(document.createTextNode(spec.name));
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = KIND_LABEL[spec.kind];
+      name.appendChild(badge);
+      body.appendChild(name);
+      const sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = spec.items.length
+        ? plural(spec.items.length, 'idea', 'ideas') + ' to start with'
+        : 'Empty — this one is yours to fill in';
+      body.appendChild(sub);
+      opt.appendChild(body);
+
+      opt.addEventListener('click', () => {
+        if (chosenStarters.has(i)) chosenStarters.delete(i);
+        else chosenStarters.add(i);
+        opt.setAttribute('aria-pressed', String(chosenStarters.has(i)));
+        tick.textContent = chosenStarters.has(i) ? '✓' : '';
+        syncStarterButton();
+      });
+      box.appendChild(opt);
+    });
+
+    syncStarterButton();
+    $('starterDialog').showModal();
+  }
+
+  function syncStarterButton() {
+    const btn = $('starterAdd');
+    btn.disabled = chosenStarters.size === 0;
+    btn.textContent = chosenStarters.size
+      ? 'Add ' + plural(chosenStarters.size, 'list', 'lists')
+      : 'Add lists';
+  }
+
+  $('starterAdd').addEventListener('click', () => {
+    const added = [...chosenStarters].sort((a, b) => a - b).map((i) => L.listFromStarter(L.STARTER_LISTS[i]));
+    if (!added.length) return;
+    state.lists.push(...added);
+    save();
+    $('starterDialog').close();
+    renderAll();
+    toast(plural(added.length, 'list', 'lists') + ' added — edit or delete them freely', () => {
+      for (const list of added) {
+        const at = state.lists.indexOf(list);
+        if (at !== -1) state.lists.splice(at, 1);
+      }
+    });
+  });
+
+  $('starterCancel').addEventListener('click', () => $('starterDialog').close());
+  $('seedBtn').addEventListener('click', openStarterDialog);
+  $('starterBtn').addEventListener('click', openStarterDialog);
+  $('scratchBtn').addEventListener('click', () => openListDialog(null));
+  $('poolEmptyBtn').addEventListener('click', () => setTab('lists'));
+
+  // ------------------------------------------------------------ pick logic
+
+  function resetSession() {
+    session.shown.clear();
+    closeCard();
+  }
+
+  function closeCard() {
+    session.current = null;
+    session.settled = false;
+    // Retires any riffle still in flight, which would otherwise settle onto a closed card.
+    session.gen += 1;
+    const card = $('card');
+    card.style.transform = '';
+    card.style.opacity = '';
+    card.classList.remove('done-state');
+    setVerdict(0);
+  }
+
+  function doPick() {
+    const drawn = L.chooseFrom(pool(), session.shown, state.history);
+    if (!drawn) { renderDecide(); return; }
+    // Every candidate had been offered already, so this reroll run starts over.
+    if (drawn.exhausted) session.shown.clear();
+
+    const choice = drawn.choice;
+    session.current = choice;
+    session.settled = false;
+    session.gen += 1;
+    session.shown.add(choice.item.id);
+    state.history = L.pushHistory(state.history, choice.item.id);
+    save();
+
+    renderDecide();
+    showCard(choice);
+  }
+
+  function showCard(choice) {
+    const card = $('card');
+    const { list, item } = choice;
+
+    card.className = 'card c-' + list.color;
+    card.hidden = false;
+    card.style.transform = '';
+    card.style.opacity = '';
+    setVerdict(0);
+
+    $('cardFrom').lastElementChild.textContent = list.name;
+    $('cardMeta').textContent = L.cardMeta(list, item);
+    $('skipBtn').hidden = false;
+    $('doBtn').hidden = false;
+    $('doBtn').textContent = 'I’m doing it';
+    $('swipeHint').textContent = swipeHintText();
+
+    if (reducedMotion.matches) {
+      settleOn(item.text);
+      return;
+    }
+    shuffleTo(item.text);
+  }
+
+  /** Riffle through other candidates before landing, so the choice feels drawn. */
+  function shuffleTo(finalText) {
+    const what = $('cardWhat');
+    const others = pool().map((c) => c.item.text).filter((t) => t !== finalText);
+    if (!others.length) { settleOn(finalText); return; }
+
+    const start = performance.now();
+    const duration = 620;
+    // Fast rerolls overlap, so an older riffle must not land on top of a newer pick.
+    const gen = session.gen;
+    let last = -1;
+
+    const frame = (now) => {
+      if (gen !== session.gen) return;
+      const t = Math.min(1, (now - start) / duration);
+      if (t >= 1) { settleOn(finalText); return; }
+      // Ease out: flicker fast at first, then slow to a stop.
+      const gap = 45 + 240 * t * t;
+      if (last < 0 || now - last >= gap) {
+        what.textContent = others[Math.floor(Math.random() * others.length)];
+        last = now;
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+
+  function settleOn(text) {
+    const card = $('card');
+    const what = $('cardWhat');
+    what.textContent = text;
+    session.settled = true;
+    card.classList.remove('settling');
+    void card.offsetWidth;
+    card.classList.add('settling');
+    card.focus({ preventScroll: true });
+    $('announcer').textContent = 'Picked: ' + text + ', from ' + session.current.list.name + '.';
+  }
+
+  function accept() {
+    if (!session.current) return;
+    const { list, item } = session.current;
+    let message;
+    let undo;
+
+    if (list.kind === 'endless') {
+      const before = { count: item.count, lastDone: item.lastDone };
+      logSession(list, item);
+      message = 'Logged — that’s ' + plural(item.count, 'time', 'times') + '.';
+      undo = () => { item.count = before.count; item.lastDone = before.lastDone; };
+    } else {
+      setDone(item, true);
+      if (list.kind === 'checklist') {
+        const done = list.items.filter((it) => it.done).length;
+        message = 'Ticked off — ' + done + ' of ' + list.items.length + '.';
+      } else {
+        message = 'Done. Nice one.';
+      }
+      undo = () => setDone(item, false);
+    }
+
+    save();
+    showAccepted(message);
+    toast(message, () => { undo(); closeCard(); });
+  }
+
+  function showAccepted(message) {
+    const card = $('card');
+    card.style.transform = '';
+    card.style.opacity = '';
+    card.classList.add('done-state');
+    setVerdict(0);
+    $('cardMeta').textContent = message;
+    $('skipBtn').hidden = true;
+    $('doBtn').hidden = false;
+    $('doBtn').textContent = 'Pick another';
+    $('swipeHint').textContent = '';
+    session.settled = false;
+    session.current = null;
+    renderChips();
+    renderLists();
+    $('announcer').textContent = message;
+    card.focus({ preventScroll: true });
+  }
+
+  $('pickBtn').addEventListener('click', doPick);
+
+  $('skipBtn').addEventListener('click', () => {
+    if (!session.current) return;
+    doPick();
+  });
+
+  $('doBtn').addEventListener('click', () => {
+    // After accepting, the same button becomes "Pick another".
+    if (!session.current) { doPick(); return; }
+    accept();
+  });
+
+  $('card').addEventListener('keydown', (e) => {
+    if (!session.current || !session.settled) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); doPick(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); accept(); }
+  });
+
+  // ---------------------------------------------------------------- swipe
+
+  const SWIPE_TRIGGER = 92;
+  let drag = null;
+
+  function setVerdict(dx) {
+    const card = $('card');
+    const skip = card.querySelector('.verdict.skip');
+    const go = card.querySelector('.verdict.go');
+    const strength = Math.min(1, Math.abs(dx) / SWIPE_TRIGGER);
+    skip.style.opacity = dx < 0 ? String(strength) : '0';
+    go.style.opacity = dx > 0 ? String(strength) : '0';
+  }
+
+  function moveCard(dx) {
+    const card = $('card');
+    card.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx / 26) + 'deg)';
+    setVerdict(dx);
+  }
+
+  function flyOut(dir, after) {
+    const card = $('card');
+    if (reducedMotion.matches) { after(); return; }
+    card.style.transition = 'transform 200ms ease-in, opacity 200ms ease-in';
+    card.style.transform = 'translateX(' + (dir * window.innerWidth) + 'px) rotate(' + (dir * 22) + 'deg)';
+    card.style.opacity = '0';
+    setTimeout(() => {
+      card.style.transition = '';
+      card.style.transform = '';
+      card.style.opacity = '';
+      after();
+    }, 200);
+  }
+
+  const card = $('card');
+
+  card.addEventListener('pointerdown', (e) => {
+    if (!session.current || !session.settled) return;
+    if (e.target.closest('button')) return;
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, locked: false };
+  });
+
+  card.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+
+    if (!drag.locked) {
+      // Let a vertical drag scroll the page instead of swiping the card.
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }
+      if (Math.abs(dx) < 10) return;
+      drag.locked = true;
+      card.setPointerCapture(drag.id);
+    }
+
+    drag.dx = dx;
+    moveCard(dx);
+  });
+
+  function endDrag(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = drag.dx;
+    const wasLocked = drag.locked;
+    if (wasLocked && card.hasPointerCapture(drag.id)) card.releasePointerCapture(drag.id);
+    drag = null;
+    if (!wasLocked) return;
+
+    if (dx <= -SWIPE_TRIGGER) {
+      flyOut(-1, doPick);
+    } else if (dx >= SWIPE_TRIGGER) {
+      flyOut(1, accept);
+    } else {
+      card.style.transition = 'transform 180ms ease, opacity 180ms ease';
+      moveCard(0);
+      setTimeout(() => { card.style.transition = ''; }, 180);
+    }
+  }
+
+  card.addEventListener('pointerup', endDrag);
+  card.addEventListener('pointercancel', endDrag);
+
+  // --------------------------------------------------------- backup & data
+
+  $('dataBtn').addEventListener('click', () => $('dataDialog').showModal());
+  $('dataClose').addEventListener('click', () => $('dataDialog').close());
+
+  $('exportBtn').addEventListener('click', () => {
+    let raw;
+    try {
+      raw = localStorage.getItem(STORE_KEY);
+    } catch (err) {
+      console.error('Unstuck: export could not read storage', err);
+      raw = null;
+    }
+    // Prefer the stored bytes so a backup can rescue data this build failed to parse.
+    const payload = raw || JSON.stringify(state);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'unstuck-backup-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+
+  $('importFile').addEventListener('change', () => {
+    const file = $('importFile').files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      let next;
+      try {
+        next = migrate(JSON.parse(String(reader.result)));
+      } catch (err) {
+        console.error('Unstuck: import failed', err);
+        toast('That file is not an Unstuck backup.');
+        $('importFile').value = '';
+        return;
+      }
+      const previous = state;
+      state = next;
+      resetSession();
+      save();
+      $('dataDialog').close();
+      renderAll();
+      toast('Backup restored', () => { state = previous; resetSession(); });
+      $('importFile').value = '';
+    });
+    reader.addEventListener('error', () => {
+      console.error('Unstuck: could not read the backup file', reader.error);
+      toast('That file could not be read.');
+      $('importFile').value = '';
+    });
+    reader.readAsText(file);
+  });
+
+  $('resetBtn').addEventListener('click', () => {
+    const count = state.lists.length;
+    if (count && !window.confirm('Delete all ' + plural(count, 'list', 'lists') + ' and everything in them? Export a backup first if you might want them back.')) return;
+    const previous = state;
+    state = emptyState();
+    resetSession();
+    save();
+    $('dataDialog').close();
+    renderAll();
+    toast('Everything erased', () => { state = previous; resetSession(); });
+  });
+
+  // ------------------------------------------------------------- start-up
+
+  load();
+  renderAll();
+
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch((err) => {
+        // Offline launch is a bonus; the app still works without it.
+        console.warn('Unstuck: service worker did not register', err);
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
