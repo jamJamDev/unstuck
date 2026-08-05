@@ -424,6 +424,27 @@ main {
   overflow: hidden;
   margin-top: 8px;
 }
+
+#detailProgress { margin-top: 12px; }
+.progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.progress-meta button {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  min-height: 32px;
+  padding: 0 4px;
+}
+.progress-meta button:hover { color: var(--text); }
 .progress > i {
   display: block;
   height: 100%;
@@ -607,7 +628,17 @@ dialog input[type="text"] {
   border-radius: 12px;
 }
 dialog input[type="text"]:focus { border-color: var(--accent); outline: none; }
-dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
+dialog .dlg-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+  /* The dialog body scrolls, so keep the actions reachable without hunting. */
+  position: sticky;
+  bottom: -20px;
+  padding: 12px 0;
+  margin-bottom: -20px;
+  background: linear-gradient(to top, var(--surface) 72%, transparent);
+}
 
 .kind-picker { display: flex; flex-direction: column; gap: 8px; }
 .kind-opt {
@@ -810,6 +841,13 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
       <div class="detail-head">
         <div id="detailTitle" class="title"><span class="dot"></span><span></span></div>
         <div id="detailKind" class="kind"></div>
+        <div id="detailProgress" hidden>
+          <div class="progress"><i id="detailProgressFill"></i></div>
+          <div class="progress-meta">
+            <span id="detailProgressText"></span>
+            <button type="button" id="untickAllBtn">Untick all</button>
+          </div>
+        </div>
       </div>
 
       <form id="addForm" class="add-row">
@@ -864,19 +902,43 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
       <span>How does finishing work?</span>
       <div class="kind-picker" role="radiogroup" aria-label="Kind of list">
         <label class="kind-opt">
-          <input type="radio" name="kind" value="todo" checked>
-          <span><strong>To-do</strong><small>Jobs that go away once they're done. Chores, errands, admin.</small></span>
-        </label>
-        <label class="kind-opt">
-          <input type="radio" name="kind" value="checklist">
-          <span><strong>Collection</strong><small>Things you tick off and keep as a record. Books, films, places.</small></span>
+          <input type="radio" name="kind" value="once" checked>
+          <span><strong>Tick off</strong><small>Finishing something takes it out of the hat. Chores, books, errands.</small></span>
         </label>
         <label class="kind-opt">
           <input type="radio" name="kind" value="endless">
-          <span><strong>Ongoing</strong><small>Never finished, just done again. Practise guitar, study Spanish.</small></span>
+          <span><strong>Ongoing</strong><small>Never finished, just done again. Practise guitar, go for a walk.</small></span>
         </label>
       </div>
       <p class="field-note" id="kindNote" hidden></p>
+    </div>
+
+    <div class="field" id="keepField">
+      <span>Once something's ticked off</span>
+      <div class="kind-picker" role="radiogroup" aria-label="What happens to finished things">
+        <label class="kind-opt">
+          <input type="radio" name="keep" value="clear" checked>
+          <span><strong>Move it out of the way</strong><small>Finished things drop into a Done pile you can clear out.</small></span>
+        </label>
+        <label class="kind-opt">
+          <input type="radio" name="keep" value="record">
+          <span><strong>Keep it as a record</strong><small>It stays put, ticked, so the list is the tally of what you've done.</small></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="field" id="progressField">
+      <span>How the list reads</span>
+      <div class="kind-picker" role="radiogroup" aria-label="How the list summarises itself">
+        <label class="kind-opt">
+          <input type="radio" name="summary" value="left" checked>
+          <span><strong>What's left</strong><small>"10 things left" — for lists you want to get to the bottom of.</small></span>
+        </label>
+        <label class="kind-opt">
+          <input type="radio" name="summary" value="progress">
+          <span><strong>How far through</strong><small>"2 of 12 done", with a progress bar — for lists you're working through.</small></span>
+        </label>
+      </div>
     </div>
 
     <div class="field">
@@ -946,12 +1008,7 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
 
   // ---------------------------------------------------------------- state
 
-  /**
-   * lists[].kind drives everything downstream:
-   *   todo      — done items leave the pool and get tucked into a "Done" section
-   *   checklist — done items leave the pool but stay visible as a record, with progress
-   *   endless   — never done; picking one logs a session and it stays in the pool
-   */
+  // The state shape and what each field means live in logic.js, which owns them.
   let state = emptyState();
   let ui = { tab: 'decide', openListId: null, editingListId: null, draftColor: COLORS[0] };
   let session = { shown: new Set(), current: null, settled: false, gen: 0 };
@@ -993,6 +1050,9 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
     }
     try {
       state = migrate(parsed);
+      // Write the upgraded shape straight back, so an old format never lingers
+      // in storage waiting on the user to happen to change something.
+      if (parsed.schema !== state.schema) save();
     } catch (err) {
       console.error('Unstuck: saved data is not in the expected shape', err);
       showBanner('Your saved lists are in an unrecognised format. Nothing has been deleted; open Backup & data to export the raw copy.');
@@ -1217,7 +1277,7 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
       sub.textContent = listSummary(list);
       body.appendChild(sub);
 
-      if (list.kind === 'checklist' && list.items.length) {
+      if (list.showProgress && list.kind === 'once' && list.items.length) {
         const doneCount = list.items.filter((it) => it.done).length;
         const bar = document.createElement('div');
         bar.className = 'progress';
@@ -1242,31 +1302,32 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
     title.className = 'title c-' + list.color;
     title.lastElementChild.textContent = list.name;
 
-    $('detailKind').textContent = {
-      todo: 'To-do · finished things move out of the way',
-      checklist: 'Collection · ticked things stay as a record',
-      endless: 'Ongoing · nothing is ever finished, it just gets done again',
-    }[list.kind];
+    $('detailKind').textContent = list.kind === 'endless'
+      ? 'Ongoing · nothing is ever finished, it just gets done again'
+      : 'Tick off · ' + (list.keepDone ? 'ticked things stay put as a record' : 'finished things move out of the way');
 
     $('screenList').className = 'screen c-' + list.color;
-    $('addInput').placeholder = {
-      todo: 'Add a job',
-      checklist: 'Add something to tick off',
-      endless: 'Add something you keep coming back to',
-    }[list.kind];
+    $('addInput').placeholder = list.kind === 'endless'
+      ? 'Add something you keep coming back to'
+      : 'Add something to tick off';
 
-    const open = list.kind === 'endless' ? list.items : list.items.filter((it) => !it.done);
-    const done = list.kind === 'endless' ? [] : list.items.filter((it) => it.done);
+    // Where finished items sit is the only thing keepDone changes: kept in place
+    // among the rest, or swept into the Done pile below.
+    const sweeps = list.kind === 'once' && !list.keepDone;
+    const open = sweeps ? list.items.filter((it) => !it.done) : list.items;
+    const done = sweeps ? list.items.filter((it) => it.done) : [];
+    const doneCount = list.kind === 'endless' ? 0 : list.items.filter((it) => it.done).length;
 
     renderItems($('openItems'), list, open);
+    renderDetailProgress(list, doneCount);
 
     const emptyMsg = $('detailEmpty');
     if (!list.items.length) {
       emptyMsg.hidden = false;
       emptyMsg.textContent = 'Nothing in here yet. Add the first thing above.';
-    } else if (!open.length) {
+    } else if (!pickableCount(list)) {
       emptyMsg.hidden = false;
-      emptyMsg.textContent = list.kind === 'checklist'
+      emptyMsg.textContent = list.keepDone
         ? 'Every one ticked off. Nothing left for Unstuck to pick here.'
         : 'All clear. Nothing left in this list.';
     } else {
@@ -1275,11 +1336,39 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
 
     $('doneSection').hidden = done.length === 0;
     if (done.length) {
-      $('doneLabel').textContent = (list.kind === 'checklist' ? 'Ticked off' : 'Done') + ' · ' + done.length;
-      $('clearDoneBtn').textContent = list.kind === 'checklist' ? 'Untick all' : 'Clear these';
+      $('doneLabel').textContent = 'Done · ' + done.length;
+      $('clearDoneBtn').textContent = 'Clear these';
       renderItems($('doneItems'), list, done);
     }
   }
+
+  function renderDetailProgress(list, doneCount) {
+    const box = $('detailProgress');
+    const show = list.showProgress && list.kind === 'once' && list.items.length > 0;
+    box.hidden = !show;
+    if (!show) return;
+    $('detailProgressFill').style.width = Math.round((doneCount / list.items.length) * 100) + '%';
+    $('detailProgressText').textContent = doneCount + ' of ' + list.items.length + ' done';
+    // Only a record keeps its ticks on screen, so only it can untick them here;
+    // a sweeping list clears its Done pile instead.
+    $('untickAllBtn').hidden = !list.keepDone || doneCount === 0;
+  }
+
+  function untickAll(list) {
+    const wasDone = list.items.filter((it) => it.done).map((it) => ({ item: it, was: completionOf(it) }));
+    if (!wasDone.length) return;
+    wasDone.forEach(({ item }) => setDone(item, false));
+    save();
+    renderAll();
+    toast('Unticked ' + plural(wasDone.length, 'thing', 'things'), () => {
+      wasDone.forEach(({ item, was }) => Object.assign(item, was));
+    });
+  }
+
+  $('untickAllBtn').addEventListener('click', () => {
+    const list = listById(ui.openListId);
+    if (list) untickAll(list);
+  });
 
   function renderItems(container, list, items) {
     container.textContent = '';
@@ -1415,28 +1504,15 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
   $('clearDoneBtn').addEventListener('click', () => {
     const list = listById(ui.openListId);
     if (!list) return;
-    if (list.kind === 'checklist') {
-      // Snapshot the whole completion state: unticking can also withdraw the
-      // implied session count, so restoring the flag alone would not undo it.
-      const wasDone = list.items.filter((it) => it.done).map((it) => ({ item: it, was: completionOf(it) }));
-      if (!wasDone.length) return;
-      wasDone.forEach(({ item }) => setDone(item, false));
-      save();
-      renderAll();
-      toast('Unticked ' + plural(wasDone.length, 'thing', 'things'), () => {
-        wasDone.forEach(({ item, was }) => Object.assign(item, was));
-      });
-    } else {
-      const removed = list.items.filter((it) => it.done);
-      if (!removed.length) return;
-      const snapshot = list.items.slice();
-      list.items = list.items.filter((it) => !it.done);
-      save();
-      renderAll();
-      toast('Cleared ' + plural(removed.length, 'finished thing', 'finished things'), () => {
-        list.items = snapshot;
-      });
-    }
+    const removed = list.items.filter((it) => it.done);
+    if (!removed.length) return;
+    const snapshot = list.items.slice();
+    list.items = list.items.filter((it) => !it.done);
+    save();
+    renderAll();
+    toast('Cleared ' + plural(removed.length, 'finished thing', 'finished things'), () => {
+      list.items = snapshot;
+    });
   });
 
   $('deleteListBtn').addEventListener('click', () => {
@@ -1486,8 +1562,13 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
       : 'Name it after what it is about; the kind decides how finishing works.';
     $('listName').value = list ? list.name : '';
     $('listSave').textContent = list ? 'Save' : 'Create list';
-    const checked = document.querySelector('input[name="kind"][value="' + (list ? list.kind : 'todo') + '"]');
+    const checked = document.querySelector('input[name="kind"][value="' + (list ? list.kind : 'once') + '"]');
     if (checked) checked.checked = true;
+    const keep = document.querySelector('input[name="keep"][value="' + (list && list.keepDone ? 'record' : 'clear') + '"]');
+    if (keep) keep.checked = true;
+    const summary = document.querySelector('input[name="summary"][value="' + (list && list.showProgress ? 'progress' : 'left') + '"]');
+    if (summary) summary.checked = true;
+    syncKeepField();
     // Switching kind only changes how items are read, so say so plainly.
     const note = $('kindNote');
     note.hidden = !list;
@@ -1498,6 +1579,18 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
     buildSwatches();
     $('listDialog').showModal();
     $('listName').focus();
+  }
+
+  /** An ongoing list never finishes anything, so neither display choice applies. */
+  function syncKeepField() {
+    const kind = document.querySelector('input[name="kind"]:checked');
+    const ticks = Boolean(kind) && kind.value === 'once';
+    $('keepField').hidden = !ticks;
+    $('progressField').hidden = !ticks;
+  }
+
+  for (const radio of document.querySelectorAll('input[name="kind"]')) {
+    radio.addEventListener('change', syncKeepField);
   }
 
   $('newListBtn').addEventListener('click', () => openListDialog(null));
@@ -1512,20 +1605,30 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
     const name = $('listName').value.trim();
     if (!name) return;
     const kindInput = document.querySelector('input[name="kind"]:checked');
+    const keepInput = document.querySelector('input[name="keep"]:checked');
+    const summaryInput = document.querySelector('input[name="summary"]:checked');
+    const kind = kindInput ? kindInput.value : 'once';
+    const keepDone = kind === 'once' && Boolean(keepInput) && keepInput.value === 'record';
+    const showProgress = kind === 'once' && Boolean(summaryInput) && summaryInput.value === 'progress';
     const existing = ui.editingListId ? listById(ui.editingListId) : null;
 
     if (existing) {
-      const before = { name: existing.name, color: existing.color, kind: existing.kind };
+      const before = {
+        name: existing.name, color: existing.color, kind: existing.kind,
+        keepDone: existing.keepDone, showProgress: existing.showProgress,
+      };
       existing.name = name;
       existing.color = ui.draftColor;
-      existing.kind = kindInput ? kindInput.value : existing.kind;
+      existing.kind = kind;
+      existing.keepDone = keepDone;
+      existing.showProgress = showProgress;
       // A kind change alters the pool, so any card drawn under the old rules is stale.
-      if (before.kind !== existing.kind) resetSession();
+      if (before.kind !== kind) resetSession();
       save();
       $('listDialog').close();
       renderAll();
-      if (before.kind !== existing.kind) {
-        toast('This list is now: ' + KIND_LABEL[existing.kind], () => {
+      if (before.kind !== kind) {
+        toast('This list is now: ' + KIND_LABEL[kind], () => {
           Object.assign(existing, before);
           resetSession();
         });
@@ -1533,7 +1636,7 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
       return;
     }
 
-    const list = newList(name, kindInput ? kindInput.value : 'todo', ui.draftColor);
+    const list = newList(name, kind, ui.draftColor, { keepDone, showProgress });
     state.lists.push(list);
     save();
     $('listDialog').close();
@@ -1742,7 +1845,7 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
       message = 'Logged — that’s ' + plural(item.count, 'time', 'times') + '.';
     } else {
       setDone(item, true);
-      if (list.kind === 'checklist') {
+      if (list.showProgress) {
         const done = list.items.filter((it) => it.done).length;
         message = 'Ticked off — ' + done + ' of ' + list.items.length + '.';
       } else {

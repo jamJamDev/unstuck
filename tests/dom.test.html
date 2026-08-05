@@ -106,9 +106,11 @@
     'a pick to settle'
   );
 
-  function listOf(kind, name, texts) {
+  function listOf(kind, name, texts, display) {
     return {
       id: 'l-' + name, name, kind, color: 'sky',
+      keepDone: Boolean(display && display.keepDone),
+      showProgress: Boolean(display && display.showProgress),
       items: texts.map((t, i) => ({ id: name + '-' + i, text: t, done: false, doneAt: 0, count: 0, lastDone: 0 })),
     };
   }
@@ -117,7 +119,7 @@
   // ------------------------------------------------------------- the tests
 
   test('hidden elements are really hidden, not just marked', async () => {
-    const app = await boot(stateOf([listOf('todo', 'A', ['one'])]));
+    const app = await boot(stateOf([listOf('once', 'A', ['one'])]));
     // Regression: several of these set an explicit display, which beat [hidden].
     equal(shown(app.win, app.$('backBtn')), false, 'back button must not show on Decide');
     equal(shown(app.win, app.$('screenLists')), false, 'the Lists screen must be hidden');
@@ -158,7 +160,7 @@
   });
 
   test('starter lists can be added again later and undone', async () => {
-    const app = await boot(stateOf([listOf('todo', 'Mine', ['Something'])]));
+    const app = await boot(stateOf([listOf('once', 'Mine', ['Something'])]));
     app.$('tabLists').click();
     app.$('starterBtn').click();
     await waitFor(() => app.$('starterDialog').open, 'the starter dialog');
@@ -171,7 +173,7 @@
   });
 
   test('a list kind can be changed after creation, keeping every item', async () => {
-    const books = listOf('checklist', 'Books', ['Piranesi', 'Station Eleven']);
+    const books = listOf('once', 'Books', ['Piranesi', 'Station Eleven'], { keepDone: true, showProgress: true });
     books.items[0].done = true;
     const app = await boot(stateOf([books]));
     equal(app.doc.querySelector('#chips .chip .count').textContent, '1', 'one unticked book to start');
@@ -196,12 +198,12 @@
   test('a ticked item becomes a one-session entry when switched to ongoing', async () => {
     // Regression: it stayed struck through with a 0x tally, reading as both
     // finished and never done.
-    const app = await boot(stateOf([listOf('checklist', 'Books', ['Piranesi', 'Station Eleven'])]));
+    const app = await boot(stateOf([listOf('once', 'Books', ['Piranesi', 'Station Eleven'], { keepDone: true, showProgress: true })]));
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
     app.doc.querySelector('#openItems .check').click();
-    await waitFor(() => app.doc.querySelectorAll('#doneItems .item').length === 1, 'the tick');
+    await waitFor(() => stored().lists[0].items[0].done, 'the tick');
 
     app.$('editListBtn').click();
     app.doc.querySelector('input[name="kind"][value="endless"]').checked = true;
@@ -226,9 +228,10 @@
     await waitFor(() => stored().lists[0].items[0].count === 3, 'three logged sessions');
 
     app.$('editListBtn').click();
-    app.doc.querySelector('input[name="kind"][value="checklist"]').checked = true;
+    app.doc.querySelector('input[name="kind"][value="once"]').checked = true;
+    app.doc.querySelector('input[name="keep"][value="clear"]').checked = true;
     app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
-    await waitFor(() => stored().lists[0].kind === 'checklist', 'the kind change');
+    await waitFor(() => stored().lists[0].kind === 'once', 'the kind change');
 
     equal(app.doc.querySelectorAll('#doneItems .item').length, 1, 'the practised one reads as done');
     equal(app.doc.querySelectorAll('#openItems .item').length, 1, 'the untouched one is still open');
@@ -236,7 +239,7 @@
   });
 
   test('undoing a kind change puts the list back as it was', async () => {
-    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
@@ -246,11 +249,11 @@
     await waitFor(() => stored().lists[0].kind === 'endless', 'the kind change');
     equal(app.$('toastText').textContent, 'This list is now: Ongoing');
     app.$('toastAction').click();
-    await waitFor(() => stored().lists[0].kind === 'todo', 'the undo');
+    await waitFor(() => stored().lists[0].kind === 'once', 'the undo');
   });
 
   test('picking draws a real item and announces it', async () => {
-    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up', 'Water plants'])]));
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up', 'Water plants'])]));
     app.$('pickBtn').click();
     await settled(app);
     const what = app.$('cardWhat').textContent;
@@ -261,7 +264,7 @@
   });
 
   test('skip rerolls onto the other item rather than repeating', async () => {
-    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up', 'Water plants'])]));
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up', 'Water plants'])]));
     app.$('pickBtn').click();
     await settled(app);
     const first = app.$('cardWhat').textContent;
@@ -272,7 +275,7 @@
   });
 
   test('accepting a to-do marks it done and offers another', async () => {
-    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
     app.$('pickBtn').click();
     await settled(app);
     app.$('doBtn').click();
@@ -298,7 +301,7 @@
   });
 
   test('accepting a collection item ticks it off and reports progress', async () => {
-    const app = await boot(stateOf([listOf('checklist', 'Books', ['Piranesi', 'Station Eleven'])]));
+    const app = await boot(stateOf([listOf('once', 'Books', ['Piranesi', 'Station Eleven'], { keepDone: true, showProgress: true })]));
     app.$('pickBtn').click();
     await settled(app);
     app.$('doBtn').click();
@@ -307,7 +310,7 @@
   });
 
   test('undo restores an accepted pick', async () => {
-    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
     app.$('pickBtn').click();
     await settled(app);
     app.$('doBtn').click();
@@ -319,8 +322,8 @@
 
   test('chips scope the pool to the selected lists', async () => {
     const app = await boot(stateOf([
-      listOf('todo', 'House', ['Wash up']),
-      listOf('checklist', 'Books', ['Piranesi']),
+      listOf('once', 'House', ['Wash up']),
+      listOf('once', 'Books', ['Piranesi'], { keepDone: true, showProgress: true }),
     ]));
     const chip = (name) => [...app.doc.querySelectorAll('#chips .chip')].find((c) => c.textContent.includes(name));
     chip('Books').click();
@@ -337,7 +340,7 @@
   test('toggling a chip keeps keyboard focus on it', async () => {
     // Regression: re-rendering used to replace the chip buttons, dropping focus
     // to the body the moment a keyboard user activated one.
-    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up']), listOf('todo', 'Work', ['Email'])]));
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up']), listOf('once', 'Work', ['Email'])]));
     const target = [...app.doc.querySelectorAll('#chips .chip')].find((c) => c.textContent.includes('Work'));
     target.focus();
     target.click();
@@ -346,7 +349,7 @@
   });
 
   test('renaming a list updates its chip and card label', async () => {
-    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
@@ -360,16 +363,16 @@
   });
 
   test('an exhausted selection explains itself instead of offering a dead button', async () => {
-    const done = listOf('todo', 'House', ['Wash up']);
+    const done = listOf('once', 'House', ['Wash up']);
     done.items[0].done = true;
-    const app = await boot(stateOf([done, listOf('todo', 'Other', ['Something'])], ['l-House']));
+    const app = await boot(stateOf([done, listOf('once', 'Other', ['Something'])], ['l-House']));
     equal(shown(app.win, app.$('poolEmpty')), true);
     equal(shown(app.win, app.$('pickBtn')), false);
     equal(app.$('poolEmptyTitle').textContent, 'That selection is empty');
   });
 
   test('items can be added, renamed and deleted, and deletion is undoable', async () => {
-    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
@@ -392,16 +395,66 @@
     equal(stored().lists[0].items[1].text, 'Take the recycling out', 'undo restored the wrong item');
   });
 
-  test('ticking an item moves it into the done section', async () => {
-    const app = await boot(stateOf([listOf('checklist', 'Books', ['Piranesi', 'Station Eleven'])]));
+  test('a sweeping list moves ticked items into a Done pile', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up', 'Bins out'])]));
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
     app.doc.querySelector('#openItems .check').click();
     await waitFor(() => app.doc.querySelectorAll('#doneItems .item').length === 1, 'the done section');
-    equal(app.doc.querySelectorAll('#openItems .item').length, 1);
-    equal(app.$('doneLabel').textContent, 'Ticked off · 1');
+    equal(app.doc.querySelectorAll('#openItems .item').length, 1, 'the ticked one must leave the main list');
+    equal(app.$('doneLabel').textContent, 'Done · 1');
     equal(app.doc.querySelector('#doneItems .check').getAttribute('aria-checked'), 'true');
+    equal(shown(app.win, app.$('detailProgress')), false, 'this list reads as what is left, not progress');
+  });
+
+  test('a record list keeps ticked items in place and shows progress', async () => {
+    const app = await boot(stateOf([
+      listOf('once', 'Books', ['Piranesi', 'Station Eleven', 'Earthsea'], { keepDone: true, showProgress: true }),
+    ]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.doc.querySelector('#openItems .check').click();
+    await waitFor(() => stored().lists[0].items[0].done, 'the tick');
+
+    equal(app.doc.querySelectorAll('#openItems .item').length, 3, 'a record keeps everything on screen');
+    equal(shown(app.win, app.$('doneSection')), false, 'nothing is swept away');
+    equal(app.doc.querySelectorAll('#openItems .item.checked').length, 1, 'the ticked one is struck through in place');
+    equal(shown(app.win, app.$('detailProgress')), true);
+    equal(app.$('detailProgressText').textContent, '1 of 3 done');
+    equal(app.$('detailProgressFill').style.width, '33%');
+  });
+
+  test('the two display choices are independent of each other', async () => {
+    // A sweeping list can still read as progress, which is why they are not one option.
+    const app = await boot(stateOf([
+      listOf('once', 'Chores', ['a', 'b', 'c', 'd'], { keepDone: false, showProgress: true }),
+    ]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.doc.querySelector('#openItems .check').click();
+    await waitFor(() => app.doc.querySelectorAll('#doneItems .item').length === 1, 'the done pile');
+    equal(shown(app.win, app.$('detailProgress')), true, 'progress must not depend on keeping the record');
+    equal(app.$('detailProgressText').textContent, '1 of 4 done');
+    equal(shown(app.win, app.$('untickAllBtn')), false, 'a swept list clears its pile instead of unticking');
+  });
+
+  test('an ongoing list offers neither display choice', async () => {
+    const app = await boot(stateOf([listOf('endless', 'Keep', ['Guitar'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    equal(shown(app.win, app.$('detailProgress')), false, 'progress is meaningless with no end');
+    app.$('editListBtn').click();
+    await waitFor(() => app.$('listDialog').open, 'the edit dialog');
+    equal(shown(app.win, app.$('keepField')), false, 'nothing is ever finished, so nothing to place');
+    equal(shown(app.win, app.$('progressField')), false);
+    app.doc.querySelector('input[name="kind"][value="once"]').checked = true;
+    app.doc.querySelector('input[name="kind"][value="once"]').dispatchEvent(new app.win.Event('change', { bubbles: true }));
+    equal(shown(app.win, app.$('keepField')), true, 'switching to tick-off reveals them');
+    equal(shown(app.win, app.$('progressField')), true);
   });
 
   test('changes survive a reload', async () => {
@@ -429,7 +482,7 @@
   });
 
   test('every visible control has an accessible name', async () => {
-    const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
     const unnamed = [];
     for (const el of app.doc.querySelectorAll('button, input')) {
       if (!shown(app.win, el) || !el.offsetParent) continue;

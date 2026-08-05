@@ -18,7 +18,7 @@ function list(name, kind, texts, extra) {
 }
 
 function stateWith(lists, selection, history) {
-  return { schema: 1, lists, selection: selection || [], history: history || [] };
+  return { schema: L.SCHEMA, lists, selection: selection || [], history: history || [] };
 }
 
 /** Deterministic stand-in for Math.random: replays the given fractions. */
@@ -56,14 +56,54 @@ test('migrate coerces field types rather than trusting the file', () => {
 
 test('migrate falls back on unknown kinds and colours', () => {
   const out = L.migrate({ lists: [{ name: 'X', kind: 'wat', color: 'chartreuse', items: [] }] });
-  assert.equal(out.lists[0].kind, 'todo');
+  assert.equal(out.lists[0].kind, 'once');
   assert.equal(out.lists[0].color, L.COLORS[0]);
 });
 
 test('migrate does not let a prototype-polluting kind through', () => {
   // A bare `KIND_LABEL[kind]` truthiness check would accept "constructor".
   const out = L.migrate({ lists: [{ name: 'X', kind: 'constructor', items: [] }] });
-  assert.equal(out.lists[0].kind, 'todo');
+  assert.equal(out.lists[0].kind, 'once');
+});
+
+test('a schema 1 to-do list keeps behaving exactly as it did', () => {
+  const out = L.migrate({
+    schema: 1,
+    lists: [{ id: 'a', name: 'Chores', kind: 'todo', color: 'sky', items: [{ id: 'x', text: 'Wash up' }] }],
+  });
+  assert.deepEqual(
+    { kind: out.lists[0].kind, keepDone: out.lists[0].keepDone, showProgress: out.lists[0].showProgress },
+    { kind: 'once', keepDone: false, showProgress: false },
+    'a to-do swept finished things away and showed what was left'
+  );
+  assert.equal(out.lists[0].items[0].text, 'Wash up', 'nothing in it may be lost');
+});
+
+test('a schema 1 collection keeps its record and its progress bar', () => {
+  const out = L.migrate({
+    schema: 1,
+    lists: [{ id: 'b', name: 'Books', kind: 'checklist', color: 'rose', items: [{ id: 'y', text: 'Piranesi', done: true }] }],
+  });
+  assert.deepEqual(
+    { kind: out.lists[0].kind, keepDone: out.lists[0].keepDone, showProgress: out.lists[0].showProgress },
+    { kind: 'once', keepDone: true, showProgress: true },
+    'a collection was exactly these two display choices switched on'
+  );
+  assert.equal(out.lists[0].items[0].done, true, 'ticks must survive the migration');
+});
+
+test('a legacy kind cannot be overridden by stray display fields in the file', () => {
+  // The old kind fully determined both, so a schema 1 payload's own flags are noise.
+  const out = L.migrate({
+    lists: [{ name: 'Books', kind: 'checklist', keepDone: false, showProgress: false, items: [] }],
+  });
+  assert.equal(out.lists[0].keepDone, true);
+  assert.equal(out.lists[0].showProgress, true);
+});
+
+test('migrating twice changes nothing the second time', () => {
+  const once = L.migrate({ schema: 1, lists: [{ name: 'Books', kind: 'checklist', items: [{ text: 'X' }] }] });
+  assert.deepEqual(L.migrate(JSON.parse(JSON.stringify(once))), once, 'migration must be idempotent');
 });
 
 test('migrate drops items with no usable text and gives every item an id', () => {
@@ -102,29 +142,31 @@ test('an endless list keeps its items in the pool even when flagged done', () =>
   assert.equal(L.pickableCount(endless), 1);
 });
 
-test('todo and collection lists drop done items from the pool', () => {
-  for (const kind of ['todo', 'checklist']) {
-    const l = list('L', kind, [item('open'), item('closed', { done: true })]);
-    assert.equal(L.pickableCount(l), 1, kind + ' counted a done item');
+test('a tick-off list drops done items from the pool however it displays them', () => {
+  // The display choices must be invisible to the picker — that is the whole
+  // reason they stopped being separate kinds.
+  for (const display of [{}, { keepDone: true }, { showProgress: true }, { keepDone: true, showProgress: true }]) {
+    const l = list('L', 'once', [item('open'), item('closed', { done: true })], display);
+    assert.equal(L.pickableCount(l), 1, 'counted a done item with ' + JSON.stringify(display));
     assert.equal(L.isPickable(l, l.items[1]), false);
   }
 });
 
 test('an empty selection means every list is in play', () => {
-  const s = stateWith([list('A', 'todo', ['a1']), list('B', 'todo', ['b1'])]);
+  const s = stateWith([list('A', 'once', ['a1']), list('B', 'once', ['b1'])]);
   assert.equal(L.activeLists(s).length, 2);
   assert.equal(L.pool(s).length, 2);
 });
 
 test('a selection scopes the pool to the chosen lists only', () => {
-  const a = list('A', 'todo', ['a1', 'a2']);
-  const b = list('B', 'todo', ['b1']);
+  const a = list('A', 'once', ['a1', 'a2']);
+  const b = list('B', 'once', ['b1']);
   const s = stateWith([a, b], [b.id]);
   assert.deepEqual(L.pool(s).map((c) => c.item.text), ['b1']);
 });
 
 test('pool entries carry the list they came from', () => {
-  const s = stateWith([list('Books', 'checklist', ['Piranesi'])]);
+  const s = stateWith([list('Books', 'once', ['Piranesi'])]);
   assert.equal(L.pool(s)[0].list.name, 'Books');
 });
 
@@ -149,7 +191,7 @@ test('chooseFrom returns null for an empty pool', () => {
 test('a one-item pool still picks that item even though it fills history', () => {
   // Regression: recentDepth is 0 here and history.slice(-0) returns the WHOLE
   // history, which would filter the only candidate out.
-  const l = list('Solo', 'todo', ['The only thing']);
+  const l = list('Solo', 'once', ['The only thing']);
   const all = L.pool(stateWith([l]));
   const history = Array(10).fill(l.items[0].id);
   const drawn = L.chooseFrom(all, new Set(), history, rng(0));
@@ -158,7 +200,7 @@ test('a one-item pool still picks that item even though it fills history', () =>
 });
 
 test('chooseFrom skips items already offered in this reroll run', () => {
-  const l = list('A', 'todo', ['one', 'two', 'three']);
+  const l = list('A', 'once', ['one', 'two', 'three']);
   const all = L.pool(stateWith([l]));
   const shown = new Set([all[0].item.id, all[1].item.id]);
   const drawn = L.chooseFrom(all, shown, [], rng(0));
@@ -167,7 +209,7 @@ test('chooseFrom skips items already offered in this reroll run', () => {
 });
 
 test('chooseFrom reports exhaustion and still picks once everything was shown', () => {
-  const l = list('A', 'todo', ['one', 'two']);
+  const l = list('A', 'once', ['one', 'two']);
   const all = L.pool(stateWith([l]));
   const shown = new Set(all.map((c) => c.item.id));
   const drawn = L.chooseFrom(all, shown, [], rng(0));
@@ -176,7 +218,7 @@ test('chooseFrom reports exhaustion and still picks once everything was shown', 
 });
 
 test('chooseFrom avoids the recent history when fresh candidates exist', () => {
-  const l = list('A', 'todo', ['one', 'two', 'three', 'four']);
+  const l = list('A', 'once', ['one', 'two', 'three', 'four']);
   const all = L.pool(stateWith([l]));
   // depth for a pool of 4 is 2, so the last two ids are off-limits.
   const history = [all[0].item.id, all[1].item.id];
@@ -187,7 +229,7 @@ test('chooseFrom avoids the recent history when fresh candidates exist', () => {
 });
 
 test('chooseFrom ignores history when avoiding it would leave nothing', () => {
-  const l = list('A', 'todo', ['one', 'two']);
+  const l = list('A', 'once', ['one', 'two']);
   const all = L.pool(stateWith([l]));
   const history = all.map((c) => c.item.id);
   const drawn = L.chooseFrom(all, new Set(), history, rng(0.99));
@@ -197,7 +239,7 @@ test('chooseFrom ignores history when avoiding it would leave nothing', () => {
 test('chooseFrom still picks when every remaining candidate is also recent', () => {
   // Rerolled past one and two, and three and four were the two most recent
   // picks — every survivor is disqualified, so the recency rule must yield.
-  const l = list('A', 'todo', ['one', 'two', 'three', 'four']);
+  const l = list('A', 'once', ['one', 'two', 'three', 'four']);
   const all = L.pool(stateWith([l]));
   const shown = new Set([all[0].item.id, all[1].item.id]);
   const history = [all[2].item.id, all[3].item.id];
@@ -209,7 +251,7 @@ test('chooseFrom still picks when every remaining candidate is also recent', () 
 });
 
 test('chooseFrom uses the injected randomness across the whole candidate set', () => {
-  const l = list('A', 'todo', ['one', 'two', 'three', 'four']);
+  const l = list('A', 'once', ['one', 'two', 'three', 'four']);
   const all = L.pool(stateWith([l]));
   assert.equal(L.chooseFrom(all, new Set(), [], rng(0)).choice.item.text, 'one');
   assert.equal(L.chooseFrom(all, new Set(), [], rng(0.99)).choice.item.text, 'four');
@@ -217,7 +259,7 @@ test('chooseFrom uses the injected randomness across the whole candidate set', (
 });
 
 test('chooseFrom draws across every selected list, not just the first', () => {
-  const s = stateWith([list('A', 'todo', ['a1']), list('B', 'endless', ['b1'])]);
+  const s = stateWith([list('A', 'once', ['a1']), list('B', 'endless', ['b1'])]);
   const all = L.pool(s);
   const names = new Set();
   for (const r of [0, 0.99]) names.add(L.chooseFrom(all, new Set(), [], rng(r)).choice.list.name);
@@ -264,23 +306,33 @@ test('relativeDay treats a future timestamp as today rather than a negative coun
   assert.equal(L.relativeDay(new Date(2026, 7, 9).getTime(), now), 'today');
 });
 
-test('listSummary describes each kind in its own terms', () => {
-  assert.equal(L.listSummary(list('E', 'todo', [])), 'Empty');
-  assert.equal(L.listSummary(list('T', 'todo', [item('a'), item('b', { done: true })])), '1 thing left');
-  assert.equal(L.listSummary(list('T', 'todo', [item('a', { done: true })])), 'All done');
-  assert.equal(L.listSummary(list('C', 'checklist', [item('a', { done: true }), item('b')])), '1 of 2 done');
+test('listSummary reads as what is left, or as progress, on request', () => {
+  assert.equal(L.listSummary(list('E', 'once', [])), 'Empty');
+  assert.equal(L.listSummary(list('T', 'once', [item('a'), item('b', { done: true })])), '1 thing left');
+  assert.equal(L.listSummary(list('T', 'once', [item('a', { done: true })])), 'All done');
+  assert.equal(
+    L.listSummary(list('C', 'once', [item('a', { done: true }), item('b')], { showProgress: true })),
+    '1 of 2 done'
+  );
   assert.equal(
     L.listSummary(list('O', 'endless', [item('a', { count: 2 }), item('b', { count: 1 })])),
     '2 things · 3 sessions logged'
   );
 });
 
+test('the summary style is independent of where finished items go', () => {
+  const items = () => [item('a', { done: true }), item('b')];
+  // Sweeping finished things away while still reading as progress, and vice versa.
+  assert.equal(L.listSummary(list('X', 'once', items(), { keepDone: false, showProgress: true })), '1 of 2 done');
+  assert.equal(L.listSummary(list('Y', 'once', items(), { keepDone: true, showProgress: false })), '1 thing left');
+});
+
 test('cardMeta explains where the picked item sits in its list', () => {
   const now = new Date(2026, 7, 4).getTime();
-  const todo = list('T', 'todo', [item('a'), item('b'), item('c', { done: true })]);
+  const todo = list('T', 'once', [item('a'), item('b'), item('c', { done: true })]);
   assert.equal(L.cardMeta(todo, todo.items[0], now), '2 things left in this list.');
 
-  const books = list('C', 'checklist', [item('a', { done: true }), item('b')]);
+  const books = list('C', 'once', [item('a', { done: true }), item('b')], { showProgress: true });
   assert.equal(L.cardMeta(books, books.items[1], now), '1 of 2 ticked off so far.');
 
   const fresh = list('O', 'endless', [item('guitar')]);
@@ -306,9 +358,12 @@ test('every starter list is valid enough to save and pick from', () => {
   }
 });
 
-test('the starter set covers all three kinds', () => {
+test('the starter set covers both kinds and both display styles', () => {
   const kinds = new Set(L.STARTER_LISTS.map((s) => s.kind));
-  assert.deepEqual([...kinds].sort(), ['checklist', 'endless', 'todo']);
+  assert.deepEqual([...kinds].sort(), ['endless', 'once']);
+  assert.ok(L.STARTER_LISTS.some((s) => s.keepDone), 'one should keep a record');
+  assert.ok(L.STARTER_LISTS.some((s) => s.kind === 'once' && !s.keepDone), 'one should sweep finished things away');
+  assert.ok(L.STARTER_LISTS.some((s) => s.showProgress), 'one should read as progress');
 });
 
 test('listFromStarter builds a real, independent list', () => {
@@ -326,7 +381,7 @@ test('listFromStarter builds a real, independent list', () => {
 
 test('a starter list survives the save/load round-trip unchanged', () => {
   const lists = L.STARTER_LISTS.map(L.listFromStarter);
-  const s = { schema: 1, lists, selection: [], history: [] };
+  const s = { schema: L.SCHEMA, lists, selection: [], history: [] };
   assert.deepEqual(L.migrate(JSON.parse(JSON.stringify(s))), s);
 });
 
@@ -341,7 +396,7 @@ test('ticking something off counts as one completion', () => {
 });
 
 test('a ticked item shows one session once the list becomes ongoing', () => {
-  const l = list('Books', 'checklist', [item('Piranesi')]);
+  const l = list('Books', 'once', [item('Piranesi')]);
   L.setDone(l.items[0], true, 1000);
   l.kind = 'endless';
   assert.equal(L.cardMeta(l, l.items[0], 1000), 'Done 1 time · last today');
@@ -374,7 +429,7 @@ test('logging a session also marks it finished for the tick views', () => {
 });
 
 test('the full journey: tick, switch to ongoing, log up to ten, switch back', () => {
-  const l = list('Practice', 'checklist', [item('guitar')]);
+  const l = list('Practice', 'once', [item('guitar')]);
   const it = l.items[0];
 
   L.setDone(it, true, 1000);
@@ -387,7 +442,7 @@ test('the full journey: tick, switch to ongoing, log up to ten, switch back', ()
   for (let i = 2; i <= 10; i++) L.logSession(it, 1000 + i);
   assert.equal(it.count, 10);
 
-  l.kind = 'checklist';
+  l.kind = 'once';
   assert.equal(it.done, true, 'ten sessions means it has certainly been done');
   assert.equal(L.pickableCount(l), 0);
 
@@ -397,8 +452,8 @@ test('the full journey: tick, switch to ongoing, log up to ten, switch back', ()
 });
 
 test('a never-touched item stays at zero under every kind', () => {
-  const l = list('Fresh', 'todo', [item('untouched')]);
-  for (const kind of ['todo', 'checklist', 'endless']) {
+  const l = list('Fresh', 'once', [item('untouched')]);
+  for (const kind of ['once', 'endless']) {
     l.kind = kind;
     assert.equal(L.pickableCount(l), 1, 'must stay pickable as ' + kind);
   }
@@ -409,41 +464,44 @@ test('a never-touched item stays at zero under every kind', () => {
 // ----------------------------------------------------------- kind changes
 
 test('switching a list to ongoing returns its ticked items to the pool', () => {
-  const l = list('Books', 'checklist', [item('read it', { done: true, doneAt: 123 }), item('unread')]);
+  const l = list('Books', 'once', [item('read it', { done: true, doneAt: 123 }), item('unread')]);
   assert.equal(L.pickableCount(l), 1);
   l.kind = 'endless';
   assert.equal(L.pickableCount(l), 2, 'an ongoing list has no unpickable items');
 });
 
 test('switching back from ongoing restores the ticks exactly', () => {
-  const l = list('Books', 'checklist', [item('read it', { done: true, doneAt: 123 }), item('unread')]);
+  const l = list('Books', 'once', [item('read it', { done: true, doneAt: 123 }), item('unread')]);
   l.kind = 'endless';
-  l.kind = 'checklist';
+  l.kind = 'once';
   assert.equal(L.pickableCount(l), 1, 'the tick must survive the round trip');
   assert.equal(l.items[0].doneAt, 123, 'when it was done must survive too');
 });
 
 test('session counts survive a switch away from ongoing and back', () => {
   const l = list('Keep', 'endless', [item('guitar', { count: 7, lastDone: 999 })]);
-  l.kind = 'todo';
+  l.kind = 'once';
   assert.equal(l.items[0].count, 7);
   l.kind = 'endless';
   assert.equal(L.cardMeta(l, l.items[0], 999).startsWith('Done 7 times'), true);
 });
 
 test('a list reads correctly under each kind without touching its items', () => {
-  const l = list('Mixed', 'todo', [item('a', { done: true, count: 2 }), item('b')]);
+  const l = list('Mixed', 'once', [item('a', { done: true, count: 2 }), item('b')]);
   const snapshot = JSON.stringify(l.items);
   const summaries = {};
-  for (const kind of ['todo', 'checklist', 'endless']) {
-    l.kind = kind;
-    summaries[kind] = L.listSummary(l);
-  }
+
+  summaries.left = L.listSummary(l);
+  l.showProgress = true;
+  summaries.progress = L.listSummary(l);
+  l.kind = 'endless';
+  summaries.ongoing = L.listSummary(l);
+
   assert.equal(JSON.stringify(l.items), snapshot, 'reading a list must never mutate it');
   assert.deepEqual(summaries, {
-    todo: '1 thing left',
-    checklist: '1 of 2 done',
-    endless: '2 things · 2 sessions logged',
+    left: '1 thing left',
+    progress: '1 of 2 done',
+    ongoing: '2 things · 2 sessions logged',
   });
 });
 
@@ -456,7 +514,7 @@ test('emptyState is a valid state that round-trips through migrate', () => {
 
 test('a full state survives a JSON backup round-trip unchanged', () => {
   const s = stateWith(
-    [list('A', 'todo', ['a1']), list('B', 'endless', [item('b1', { count: 2, lastDone: 1700000000000 })])],
+    [list('A', 'once', ['a1']), list('B', 'endless', [item('b1', { count: 2, lastDone: 1700000000000 })])],
     ['l-A'],
     ['i1']
   );
@@ -470,7 +528,7 @@ test('newItem and newList start in a clean, pickable state', () => {
     { done: false, doneAt: 0, count: 0, lastDone: 0 }
   );
   assert.ok(it.id);
-  const l = L.newList('Name', 'todo', 'sky');
+  const l = L.newList('Name', 'once', 'sky');
   assert.deepEqual(l.items, []);
-  assert.notEqual(L.newList('a', 'todo', 'sky').id, L.newList('a', 'todo', 'sky').id, 'ids must be unique');
+  assert.notEqual(L.newList('a', 'once', 'sky').id, L.newList('a', 'once', 'sky').id, 'ids must be unique');
 });

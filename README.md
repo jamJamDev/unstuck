@@ -25,7 +25,7 @@ the browser only — for a real "Add to Home Screen" install, host the folder on
 Netlify.
 
 **Editing gotcha:** `sw.js` is network-first, but browsers still cache aggressively. After an edit,
-hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v2`), or load with a `?v=N`
+hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v3`), or load with a `?v=N`
 cache-buster. If a change seems not to apply, this is almost always why.
 
 ## Layout
@@ -62,15 +62,15 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (42 checks, `node --test`, zero dependencies) — validation and coercion
-  in `migrate`, pool membership per list kind, selection scoping, the starter-list definitions, the
-  data-preserving kind switch, and the pick algorithm with an injected RNG so every branch is
-  deterministic.
-- **`tests/dom.test.html`** (22 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/logic.test.js`** (54 checks, `node --test`, zero dependencies) — validation and coercion
+  in `migrate` including the schema 1 upgrade, pool membership per kind, selection scoping, the
+  starter-list definitions, the done/count linkage, and the pick algorithm with an injected RNG so
+  every branch is deterministic.
+- **`tests/dom.test.html`** (27 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
-  only what was ticked, that a kind change keeps every item, that corrupt saved data warns instead
-  of starting silently empty.
+  only what was ticked, that a kind change keeps every item, that the two display switches are
+  genuinely independent, that corrupt saved data warns instead of starting silently empty.
 
 Both suites were mutation-checked — the behaviour each one guards was deliberately broken to confirm
 the right test turns red. The one thing neither covers is the **drag gesture**: synthetic pointer
@@ -79,20 +79,27 @@ events cannot hold a pointer capture, so swipe-to-skip and swipe-to-accept are v
 ## Lists: two independent axes
 
 A list has a **theme** (what it is about) and a **kind** (how finishing works). They are deliberately
-separate, because theme cannot determine mechanics — "Creative" spans all three: *sketch for fifteen
-minutes* is ongoing, *finish the album art* is a to-do, *watch twenty films* is a collection.
+separate, because theme cannot determine mechanics — "Creative" spans both kinds: *sketch for
+fifteen minutes* is ongoing, while *finish the album art* is something you tick off once.
 
-The theme is just the list's name. The kind drives everything downstream — what "done" means, what
-the list screen shows, and whether an item stays in the pool the picker draws from.
+The theme is just the list's name. The kind decides exactly one thing — whether finishing takes an
+item out of the pool — so there are only two:
 
 | Kind | For | Finishing something |
 |---|---|---|
-| **To-do** | chores, errands, admin | leaves the pool, drops into a **Done** section you can clear out |
-| **Collection** | books, films, places | leaves the pool but stays visible, ticked, with a progress bar |
-| **Ongoing** | practise guitar, study Spanish | never leaves the pool — each pick logs a session (`3× · last Tuesday`) |
+| **Tick off** | chores, books, errands | takes it out of the hat |
+| **Ongoing** | practise guitar, go for a walk | never leaves — each pick logs a session (`3× · last Tuesday`) |
 
-To-do and Collection look similar but differ in intent: a to-do wants to be swept away, a collection
-*is* the record. Ongoing things have no done state at all, only a tally.
+Everything else is presentation, and each part is its own switch on a tick-off list:
+
+- **Once something's ticked off** — it stays put as a record, or drops into a **Done** pile you can
+  clear out.
+- **How the list reads** — `2 of 12 done` with a progress bar, or `10 things left`.
+
+These are independent: a chores list can show a progress bar, a reading list can count down what is
+left. Schema 1 had a third kind, `checklist`, which was only ever these two switches turned on
+together — which is exactly why it felt like a duplicate of `todo` in use. The picker cannot tell
+any of it apart; only `kind` ever reaches it.
 
 **The kind is not a commitment.** Change it whenever, from Rename & colour — you rarely know which
 mechanic fits until you have lived with a list.
@@ -130,8 +137,8 @@ Two layers keep rerolls from feeling repetitive:
 Selection is otherwise uniform random — no weighting, no priority. That is deliberate: knobs to
 tune are one more thing to stall on.
 
-Accepting a pick means "done" for to-do/collection and "one more session" for ongoing. Every
-destructive or state-changing action shows a toast with **Undo**.
+Accepting a pick ticks it off on a tick-off list, and logs one more session on an ongoing one.
+Every destructive or state-changing action shows a toast with **Undo**.
 
 ## Interaction
 
@@ -153,8 +160,8 @@ One `localStorage` key, `unstuck.v1`:
 
 ```jsonc
 {
-  "schema": 1,
-  "lists": [{ "id", "name", "kind", "color", "items": [
+  "schema": 2,
+  "lists": [{ "id", "name", "kind", "color", "keepDone", "showProgress", "items": [
     { "id", "text", "done", "doneAt", "count", "lastDone" }
   ]}],
   "selection": ["<list id>"],   // empty = every list
@@ -163,8 +170,10 @@ One `localStorage` key, `unstuck.v1`:
 ```
 
 `migrate()` (in `logic.js`) is the single gate every inbound payload passes through — page load and
-backup import both. It coerces field types, drops empty items, and throws on anything that isn't
-shaped like an Unstuck backup, so a bad import can't corrupt live state.
+backup import both. It coerces field types, drops empty items, resolves schema 1's three kinds into
+the current two-plus-two-switches shape, and throws on anything that isn't shaped like an Unstuck
+backup, so a bad import can't corrupt live state. It is idempotent, and an upgraded payload is
+written straight back so an old format never lingers in storage.
 
 If saved data can't be parsed, the app says so in a banner and **leaves the bytes alone** — the
 export button writes the raw stored string rather than the in-memory state, so a backup can still

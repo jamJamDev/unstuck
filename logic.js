@@ -7,17 +7,28 @@
 var UnstuckLogic = (() => {
   'use strict';
 
-  const SCHEMA = 1;
+  const SCHEMA = 2;
   const STORE_KEY = 'unstuck.v1';
   const COLORS = ['amber', 'rose', 'violet', 'sky', 'emerald', 'teal', 'orange', 'indigo'];
 
   /**
-   * A list's kind decides what "done" means and whether an item stays in the pool:
-   *   todo      — done items leave the pool and can be cleared away
-   *   checklist — done items leave the pool but stay as a record
-   *   endless   — never done; each pick logs a session and it stays in the pool
+   * The only thing a kind decides is whether finishing takes an item out of the
+   * pool. That is the whole mechanical difference, so there are two:
+   *   once    — finishing removes it from the pool
+   *   endless — never finished; each pick logs a session and it stays in the pool
+   *
+   * Everything else is presentation, and each part is its own per-list choice:
+   *   keepDone     — finished things stay put as a record, or drop into a Done pile
+   *   showProgress — the list reads as "2 of 12 done", or as "10 things left"
+   * The picker cannot tell any of these apart; only `kind` reaches it.
    */
-  const KIND_LABEL = { todo: 'To-do', checklist: 'Collection', endless: 'Ongoing' };
+  const KIND_LABEL = { once: 'Tick off', endless: 'Ongoing' };
+
+  /** Schema 1 had a third kind that differed from `todo` only in presentation. */
+  const LEGACY_KINDS = {
+    todo: { kind: 'once', keepDone: false, showProgress: false },
+    checklist: { kind: 'once', keepDone: true, showProgress: true },
+  };
 
   const HISTORY_LIMIT = 40;
   const MAX_RECENT_AVOIDED = 5;
@@ -36,8 +47,33 @@ var UnstuckLogic = (() => {
     return { id: uid(), text, done: false, doneAt: 0, count: 0, lastDone: 0 };
   }
 
-  function newList(name, kind, color) {
-    return { id: uid(), name, kind, color, items: [] };
+  function newList(name, kind, color, opts) {
+    const o = opts || {};
+    return {
+      id: uid(),
+      name,
+      kind,
+      color,
+      keepDone: Boolean(o.keepDone),
+      showProgress: Boolean(o.showProgress),
+      items: [],
+    };
+  }
+
+  /**
+   * Resolves whatever shape a payload carries — current or schema 1 — into the
+   * kind plus its two independent display choices. Schema 1's `checklist` was
+   * both of those switched on at once, which is why it felt like a kind.
+   */
+  function resolveKind(kind, keepDone, showProgress) {
+    const legacy = Object.prototype.hasOwnProperty.call(LEGACY_KINDS, kind) ? LEGACY_KINDS[kind] : null;
+    if (legacy) return { ...legacy };
+    const known = Object.prototype.hasOwnProperty.call(KIND_LABEL, kind);
+    return {
+      kind: known ? kind : 'once',
+      keepDone: Boolean(keepDone),
+      showProgress: Boolean(showProgress),
+    };
   }
 
   /**
@@ -48,12 +84,12 @@ var UnstuckLogic = (() => {
    */
   const STARTER_LISTS = [
     {
-      name: 'Around the house', kind: 'todo', color: 'sky',
+      name: 'Around the house', kind: 'once', keepDone: false, color: 'sky',
       items: ['Wash up', 'Change the sheets', 'Take the bins out', 'Sort the pile on the chair',
         'Water the plants', 'Wipe down the kitchen'],
     },
     {
-      name: 'Productive', kind: 'todo', color: 'amber',
+      name: 'Productive', kind: 'once', keepDone: false, color: 'amber',
       items: ['Clear the inbox', 'Pay that bill you keep forgetting', 'Book the appointment',
         'Back up your files', 'Reply to the message you have been avoiding', 'Tidy your desk'],
     },
@@ -77,12 +113,12 @@ var UnstuckLogic = (() => {
       items: ['One language lesson', 'Read a long article you saved', 'Watch a documentary',
         'Ten minutes of a tutorial'],
     },
-    { name: 'Books to read', kind: 'checklist', color: 'rose', items: [] },
-    { name: 'Films to watch', kind: 'checklist', color: 'orange', items: [] },
+    { name: 'Books to read', kind: 'once', keepDone: true, showProgress: true, color: 'rose', items: [] },
+    { name: 'Films to watch', kind: 'once', keepDone: true, showProgress: true, color: 'orange', items: [] },
   ];
 
   function listFromStarter(spec) {
-    const l = newList(spec.name, spec.kind, spec.color);
+    const l = newList(spec.name, spec.kind, spec.color, spec);
     l.items = spec.items.map((text) => newItem(text));
     return l;
   }
@@ -101,7 +137,7 @@ var UnstuckLogic = (() => {
       .map((l) => ({
         id: typeof l.id === 'string' && l.id ? l.id : uid(),
         name: String(l.name || 'Untitled list'),
-        kind: Object.prototype.hasOwnProperty.call(KIND_LABEL, l.kind) ? l.kind : 'todo',
+        ...resolveKind(l.kind, l.keepDone, l.showProgress),
         color: COLORS.includes(l.color) ? l.color : COLORS[0],
         items: Array.isArray(l.items)
           ? l.items
@@ -133,9 +169,9 @@ var UnstuckLogic = (() => {
 
   /**
    * `done` and `count` are two readings of one fact — how many times this has
-   * been finished — so they are kept in step. Otherwise a list switched from
-   * Collection to Ongoing shows a ticked item at zero sessions, and switching
-   * back loses the tally.
+   * been finished — so they are kept in step. Otherwise a list switched to
+   * Ongoing shows a ticked item at zero sessions, and switching back loses the
+   * tally.
    */
   function setDone(item, done, now) {
     const at = now === undefined ? Date.now() : now;
@@ -256,7 +292,8 @@ var UnstuckLogic = (() => {
       return plural(list.items.length, 'thing', 'things') + ' · ' + plural(sessions, 'session', 'sessions') + ' logged';
     }
     const done = list.items.filter((it) => it.done).length;
-    if (list.kind === 'checklist') return done + ' of ' + list.items.length + ' done';
+    // Independent of where finished items go: some lists read better as progress.
+    if (list.showProgress) return done + ' of ' + list.items.length + ' done';
     const left = list.items.length - done;
     return left === 0 ? 'All done' : plural(left, 'thing', 'things') + ' left';
   }
@@ -267,7 +304,7 @@ var UnstuckLogic = (() => {
       if (!item.count) return 'You have not logged this one yet.';
       return 'Done ' + plural(item.count, 'time', 'times') + ' · last ' + relativeDay(item.lastDone, now);
     }
-    if (list.kind === 'checklist') {
+    if (list.showProgress) {
       const done = list.items.filter((it) => it.done).length;
       return done + ' of ' + list.items.length + ' ticked off so far.';
     }
@@ -277,7 +314,7 @@ var UnstuckLogic = (() => {
 
   return {
     SCHEMA, STORE_KEY, COLORS, KIND_LABEL, HISTORY_LIMIT, STARTER_LISTS,
-    uid, emptyState, newItem, newList, listFromStarter, migrate,
+    uid, emptyState, newItem, newList, listFromStarter, migrate, resolveKind,
     setDone, logSession,
     listById, isPickable, pickableCount, activeLists, pool,
     recentDepth, chooseFrom, pushHistory,
