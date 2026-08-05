@@ -30,6 +30,12 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(req)
       .then((res) => {
+        // A 404 or 500 is a successful fetch of a bad answer, so it never reaches
+        // the catch below. Serving it would replace the app with an error page and
+        // cache that error forever — an unpublished host must not brick an install.
+        if (!res || !res.ok) {
+          return caches.match(req).then((cached) => cached || caches.match('./index.html') || res);
+        }
         const copy = res.clone();
         // Refreshing the cached copy is best-effort — a full disk must not fail
         // the request the page is waiting on, but it does get reported.

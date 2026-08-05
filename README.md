@@ -95,9 +95,17 @@ To-do and Collection look similar but differ in intent: a to-do wants to be swep
 *is* the record. Ongoing things have no done state at all, only a tally.
 
 **The kind is not a commitment.** Change it whenever, from Rename & colour — you rarely know which
-mechanic fits until you have lived with a list. Nothing is deleted or rewritten when you switch:
-`done` and `count` are both always stored, and the kind only decides which one is *read*. Ticked
-items rejoin the pool as Ongoing and go back to being ticked if you switch back.
+mechanic fits until you have lived with a list.
+
+Switching is lossless because `done` and `count` are two readings of one fact — *how many times has
+this been finished* — and are kept in step:
+
+- Ticking something off is itself one completion, so it reads as `1×` if the list becomes Ongoing.
+- Logging a session marks it finished, so it reads as ticked if the list becomes a tick list.
+- Unticking withdraws the completion a tick implied, but never a tally built from real sessions —
+  untick something with ten logged sessions and all ten survive.
+
+An Ongoing list never strikes anything out or shows a Done section, whatever `done` says underneath.
 
 **Starter lists** (offered on a first run, and any time from the Lists screen) are themed, with the
 kind that suits them already set: Around the house, Productive, Creative, Get outside, Rest, Learn

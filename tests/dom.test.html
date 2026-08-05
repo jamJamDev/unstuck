@@ -193,6 +193,48 @@
     equal(app.doc.querySelector('#chips .chip .count').textContent, '2', 'ticked items rejoin the pool');
   });
 
+  test('a ticked item becomes a one-session entry when switched to ongoing', async () => {
+    // Regression: it stayed struck through with a 0x tally, reading as both
+    // finished and never done.
+    const app = await boot(stateOf([listOf('checklist', 'Books', ['Piranesi', 'Station Eleven'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.doc.querySelector('#openItems .check').click();
+    await waitFor(() => app.doc.querySelectorAll('#doneItems .item').length === 1, 'the tick');
+
+    app.$('editListBtn').click();
+    app.doc.querySelector('input[name="kind"][value="endless"]').checked = true;
+    app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => stored().lists[0].kind === 'endless', 'the kind change');
+
+    const rows = app.doc.querySelectorAll('#openItems .item');
+    equal(rows.length, 2, 'every item belongs in an ongoing list');
+    equal([...rows].some((r) => r.classList.contains('checked')), false, 'nothing may be struck out as ongoing');
+    equal(shown(app.win, app.$('doneSection')), false, 'an ongoing list has no done section');
+    const tallies = [...app.doc.querySelectorAll('#openItems .tally')].map((t) => t.textContent);
+    equal(tallies.join(','), '1×,0×', 'the ticked one must read as one session');
+  });
+
+  test('sessions logged as ongoing show as ticked when switched back', async () => {
+    const app = await boot(stateOf([listOf('endless', 'Practice', ['Guitar', 'Spanish'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    const tally = app.doc.querySelector('#openItems .tally');
+    for (let i = 0; i < 3; i++) app.doc.querySelector('#openItems .tally').click();
+    await waitFor(() => stored().lists[0].items[0].count === 3, 'three logged sessions');
+
+    app.$('editListBtn').click();
+    app.doc.querySelector('input[name="kind"][value="checklist"]').checked = true;
+    app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => stored().lists[0].kind === 'checklist', 'the kind change');
+
+    equal(app.doc.querySelectorAll('#doneItems .item').length, 1, 'the practised one reads as done');
+    equal(app.doc.querySelectorAll('#openItems .item').length, 1, 'the untouched one is still open');
+    equal(stored().lists[0].items[0].count, 3, 'the tally must survive');
+  });
+
   test('undoing a kind change puts the list back as it was', async () => {
     const app = await boot(stateOf([listOf('todo', 'House', ['Wash up'])]));
     app.$('tabLists').click();
@@ -247,7 +289,9 @@
     app.$('doBtn').click();
     await waitFor(() => stored().lists[0].items[0].count === 1, 'the session to be logged');
     const item = stored().lists[0].items[0];
-    equal(item.done, false, 'an ongoing item must never be marked done');
+    // `done` is deliberately set too, so the same item reads as ticked if the
+    // list is later switched to a tick view. It must not affect it while ongoing.
+    equal(item.done, true, 'a logged session is a completion for the tick views');
     assert(item.lastDone > 0, 'lastDone must be stamped');
     equal(app.$('toastText').textContent, 'Logged — that’s 1 time.');
     equal(app.doc.querySelector('#chips .chip .count').textContent, '1', 'it stays in the pool');

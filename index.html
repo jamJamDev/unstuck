@@ -934,7 +934,7 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
 
   const {
     STORE_KEY, COLORS, KIND_LABEL,
-    emptyState, migrate, newItem, newList,
+    emptyState, migrate, newItem, newList, setDone, logSession,
     pickableCount, plural, relativeDay, listSummary,
   } = L;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -1290,7 +1290,9 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
 
   function renderItemRow(list, item) {
     const row = document.createElement('li');
-    row.className = 'item' + (item.done ? ' checked' : '');
+    // An ongoing list has no notion of finished, so it never strikes anything out
+    // even though `done` is still carried underneath for the other kinds.
+    row.className = 'item' + (item.done && list.kind !== 'endless' ? ' checked' : '');
 
     if (list.kind === 'endless') {
       const tally = document.createElement('button');
@@ -1300,7 +1302,7 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
       tally.title = 'Log another session';
       tally.setAttribute('aria-label', 'Log another session of ' + item.text + '. Done ' + plural(item.count, 'time', 'times') + ' so far.');
       tally.addEventListener('click', () => {
-        logSession(list, item);
+        logSession(item);
         save();
         renderAll();
         toast('Logged. That’s ' + plural(item.count, 'time', 'times') + '.');
@@ -1385,16 +1387,6 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
     input.select();
   }
 
-  function setDone(item, done) {
-    item.done = done;
-    item.doneAt = done ? Date.now() : 0;
-  }
-
-  function logSession(list, item) {
-    item.count += 1;
-    item.lastDone = Date.now();
-  }
-
   function deleteItem(list, item) {
     const at = list.items.indexOf(item);
     if (at === -1) return;
@@ -1424,13 +1416,15 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
     const list = listById(ui.openListId);
     if (!list) return;
     if (list.kind === 'checklist') {
-      const wasDone = list.items.filter((it) => it.done).map((it) => ({ item: it, at: it.doneAt }));
+      // Snapshot the whole completion state: unticking can also withdraw the
+      // implied session count, so restoring the flag alone would not undo it.
+      const wasDone = list.items.filter((it) => it.done).map((it) => ({ item: it, was: completionOf(it) }));
       if (!wasDone.length) return;
       wasDone.forEach(({ item }) => setDone(item, false));
       save();
       renderAll();
       toast('Unticked ' + plural(wasDone.length, 'thing', 'things'), () => {
-        wasDone.forEach(({ item, at }) => { item.done = true; item.doneAt = at; });
+        wasDone.forEach(({ item, was }) => Object.assign(item, was));
       });
     } else {
       const removed = list.items.filter((it) => it.done);
@@ -1730,17 +1724,22 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
     $('announcer').textContent = 'Picked: ' + text + ', from ' + session.current.list.name + '.';
   }
 
+  /** The four fields that together record how often something has been finished. */
+  function completionOf(item) {
+    return { done: item.done, doneAt: item.doneAt, count: item.count, lastDone: item.lastDone };
+  }
+
   function accept() {
     if (!session.current) return;
     const { list, item } = session.current;
+    // Restoring the exact prior state beats inverting the operation: accepting
+    // touches all four completion fields, and they no longer move independently.
+    const before = completionOf(item);
     let message;
-    let undo;
 
     if (list.kind === 'endless') {
-      const before = { count: item.count, lastDone: item.lastDone };
-      logSession(list, item);
+      logSession(item);
       message = 'Logged — that’s ' + plural(item.count, 'time', 'times') + '.';
-      undo = () => { item.count = before.count; item.lastDone = before.lastDone; };
     } else {
       setDone(item, true);
       if (list.kind === 'checklist') {
@@ -1749,12 +1748,11 @@ dialog .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
       } else {
         message = 'Done. Nice one.';
       }
-      undo = () => setDone(item, false);
     }
 
     save();
     showAccepted(message);
-    toast(message, () => { undo(); closeCard(); });
+    toast(message, () => { Object.assign(item, before); closeCard(); });
   }
 
   function showAccepted(message) {

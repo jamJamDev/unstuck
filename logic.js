@@ -129,6 +129,41 @@ var UnstuckLogic = (() => {
     };
   }
 
+  // -------------------------------------------------------- completing things
+
+  /**
+   * `done` and `count` are two readings of one fact — how many times this has
+   * been finished — so they are kept in step. Otherwise a list switched from
+   * Collection to Ongoing shows a ticked item at zero sessions, and switching
+   * back loses the tally.
+   */
+  function setDone(item, done, now) {
+    const at = now === undefined ? Date.now() : now;
+    item.done = done;
+    item.doneAt = done ? at : 0;
+    if (done) {
+      // Ticking something off is itself one completion.
+      if (item.count === 0) {
+        item.count = 1;
+        item.lastDone = at;
+      }
+    } else if (item.count === 1) {
+      // Unticking withdraws the completion the tick implied — but never a real
+      // tally built up from logged sessions.
+      item.count = 0;
+      item.lastDone = 0;
+    }
+  }
+
+  function logSession(item, now) {
+    const at = now === undefined ? Date.now() : now;
+    item.count += 1;
+    item.lastDone = at;
+    // A logged session is a completion too, so the tick views agree with it.
+    item.done = true;
+    item.doneAt = at;
+  }
+
   // ------------------------------------------------------------------- pool
 
   function listById(state, id) {
@@ -243,6 +278,7 @@ var UnstuckLogic = (() => {
   return {
     SCHEMA, STORE_KEY, COLORS, KIND_LABEL, HISTORY_LIMIT, STARTER_LISTS,
     uid, emptyState, newItem, newList, listFromStarter, migrate,
+    setDone, logSession,
     listById, isPickable, pickableCount, activeLists, pool,
     recentDepth, chooseFrom, pushHistory,
     plural, relativeDay, listSummary, cardMeta,

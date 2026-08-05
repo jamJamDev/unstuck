@@ -330,6 +330,82 @@ test('a starter list survives the save/load round-trip unchanged', () => {
   assert.deepEqual(L.migrate(JSON.parse(JSON.stringify(s))), s);
 });
 
+// ------------------------------------------------- done and count in step
+
+test('ticking something off counts as one completion', () => {
+  const it = item('read it');
+  L.setDone(it, true, 1000);
+  assert.equal(it.done, true);
+  assert.equal(it.count, 1, 'an ongoing view must not read zero for a ticked item');
+  assert.equal(it.lastDone, 1000);
+});
+
+test('a ticked item shows one session once the list becomes ongoing', () => {
+  const l = list('Books', 'checklist', [item('Piranesi')]);
+  L.setDone(l.items[0], true, 1000);
+  l.kind = 'endless';
+  assert.equal(L.cardMeta(l, l.items[0], 1000), 'Done 1 time · last today');
+  assert.equal(L.listSummary(l), '1 thing · 1 session logged');
+});
+
+test('unticking withdraws the completion the tick implied', () => {
+  const it = item('read it');
+  L.setDone(it, true, 1000);
+  L.setDone(it, false, 2000);
+  assert.equal(it.done, false);
+  assert.equal(it.count, 0, 'the implied session must go with the tick');
+  assert.equal(it.lastDone, 0);
+});
+
+test('unticking never destroys a tally built from real sessions', () => {
+  const it = item('guitar');
+  for (let i = 0; i < 10; i++) L.logSession(it, 1000 + i);
+  L.setDone(it, false, 3000);
+  assert.equal(it.done, false);
+  assert.equal(it.count, 10, 'ten logged sessions must survive an untick');
+});
+
+test('logging a session also marks it finished for the tick views', () => {
+  const it = item('guitar');
+  L.logSession(it, 1000);
+  assert.equal(it.count, 1);
+  assert.equal(it.done, true, 'switching to a tick view must show it ticked');
+  assert.equal(it.doneAt, 1000);
+});
+
+test('the full journey: tick, switch to ongoing, log up to ten, switch back', () => {
+  const l = list('Practice', 'checklist', [item('guitar')]);
+  const it = l.items[0];
+
+  L.setDone(it, true, 1000);
+  assert.equal(L.pickableCount(l), 0, 'ticked, so out of the pool');
+
+  l.kind = 'endless';
+  assert.equal(it.count, 1, 'the tick reads as one session');
+  assert.equal(L.pickableCount(l), 1, 'ongoing items are always pickable');
+
+  for (let i = 2; i <= 10; i++) L.logSession(it, 1000 + i);
+  assert.equal(it.count, 10);
+
+  l.kind = 'checklist';
+  assert.equal(it.done, true, 'ten sessions means it has certainly been done');
+  assert.equal(L.pickableCount(l), 0);
+
+  l.kind = 'endless';
+  assert.equal(it.count, 10, 'the tally must come back intact');
+  assert.equal(L.cardMeta(l, it, 1010).startsWith('Done 10 times'), true);
+});
+
+test('a never-touched item stays at zero under every kind', () => {
+  const l = list('Fresh', 'todo', [item('untouched')]);
+  for (const kind of ['todo', 'checklist', 'endless']) {
+    l.kind = kind;
+    assert.equal(L.pickableCount(l), 1, 'must stay pickable as ' + kind);
+  }
+  assert.equal(l.items[0].count, 0);
+  assert.equal(l.items[0].done, false);
+});
+
 // ----------------------------------------------------------- kind changes
 
 test('switching a list to ongoing returns its ticked items to the pool', () => {
