@@ -763,19 +763,78 @@ dialog .dlg-actions {
 
 .custom-color {
   display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-.custom-color input[type="color"] {
-  width: 46px;
-  height: 44px;
-  flex: none;
-  padding: 3px;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  cursor: pointer;
+  border-radius: 14px;
 }
+
+/* Hue runs clockwise from the top, saturation outwards from the white centre;
+   the shade layer above darkens the whole thing for brightness. */
+.wheel {
+  position: relative;
+  width: min(58vw, 176px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  touch-action: none;
+  cursor: crosshair;
+  background:
+    radial-gradient(circle closest-side, #fff, rgba(255, 255, 255, 0) 100%),
+    conic-gradient(from 0deg,
+      #f00 0deg, #ff0 60deg, #0f0 120deg, #0ff 180deg, #00f 240deg, #f0f 300deg, #f00 360deg);
+  box-shadow: 0 0 0 1px var(--line), 0 6px 18px -10px rgba(0, 0, 0, 0.9);
+}
+.wheel:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+
+.wheel-shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #000;
+  pointer-events: none;
+}
+
+.wheel-marker {
+  position: absolute;
+  width: 20px; height: 20px;
+  margin: -10px 0 0 -10px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.wheel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.wheel-row > span:first-child {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  flex: none;
+}
+.wheel-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+  height: 28px;
+}
+
+.wheel-preview {
+  width: 44px; height: 44px;
+  flex: none;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--preview, #f4a13c);
+}
+
 .custom-color input[type="text"] {
   flex: 1;
   min-width: 0;
@@ -1016,9 +1075,20 @@ dialog .dlg-actions {
       <span>Colour</span>
       <div class="swatches" id="swatches" role="group" aria-label="List colour"></div>
       <div class="custom-color" id="customColor" hidden>
-        <input type="color" id="colorPicker" aria-label="Pick a colour">
-        <input type="text" id="colorHex" maxlength="7" placeholder="#4dd0c4" autocomplete="off"
-               spellcheck="false" aria-label="Hex colour code" aria-describedby="colorError">
+        <div class="wheel" id="colorWheel" role="application" tabindex="0"
+             aria-label="Colour wheel. Drag to choose, or use the arrow keys: left and right change the hue, up and down the strength.">
+          <div class="wheel-shade" id="wheelShade" aria-hidden="true"></div>
+          <div class="wheel-marker" id="wheelMarker" aria-hidden="true"></div>
+        </div>
+        <label class="wheel-row">
+          <span>Brightness</span>
+          <input type="range" id="colorValue" min="4" max="100" value="100">
+        </label>
+        <div class="wheel-row">
+          <span class="wheel-preview" id="colorPreview" aria-hidden="true"></span>
+          <input type="text" id="colorHex" maxlength="7" placeholder="#4dd0c4" autocomplete="off"
+                 spellcheck="false" aria-label="Hex colour code" aria-describedby="colorError">
+        </div>
       </div>
       <p class="seg-note" id="colorError" role="alert" hidden></p>
     </div>
@@ -1647,6 +1717,7 @@ dialog .dlg-actions {
       sw.type = 'button';
       paintColor(sw, 'swatch', color);
       sw.dataset.color = color;
+      if (L.isCustomColor(color)) sw.dataset.custom = 'true';
       sw.setAttribute('aria-label', L.isCustomColor(color) ? 'Custom colour ' + color : color);
       sw.setAttribute('aria-pressed', String(color === ui.draftColor));
       sw.addEventListener('click', () => selectColor(color));
@@ -1680,13 +1751,11 @@ dialog .dlg-actions {
       showColorError('');
       return;
     }
-    // Seed both inputs from whatever is selected, resolving a palette name to
-    // its rendered hex rather than duplicating the palette in script.
-    const current = L.isCustomColor(ui.draftColor) ? ui.draftColor : currentSwatchHex();
-    $('colorPicker').value = current;
-    $('colorHex').value = current;
-    $('colorHex').focus();
-    $('colorHex').select();
+    // Seed from whatever is selected, resolving a palette name to its rendered
+    // hex rather than duplicating the palette in script.
+    setWheelFromHex(L.isCustomColor(ui.draftColor) ? ui.draftColor : currentSwatchHex(), true, false);
+    row.scrollIntoView({ block: 'nearest' });
+    $('colorWheel').focus({ preventScroll: true });
   }
 
   /** Reads the selected palette swatch's rendered colour, in #rrggbb form. */
@@ -1710,42 +1779,155 @@ dialog .dlg-actions {
     $('colorHex').setAttribute('aria-invalid', String(Boolean(message)));
   }
 
-  function applyCustomColor(raw, fromPicker) {
+  // The wheel's own state, so a drag through grey does not lose the hue and a
+  // brightness change does not have to guess it back out of the hex.
+  const wheel = { h: 30, s: 0.8, v: 1 };
+
+  function setWheelFromHex(hex, syncHexBox, adopt) {
+    const hsv = L.hexToHsv(hex);
+    if (!hsv) return;
+    // Fully black or grey has no meaningful angle; keep the one already showing.
+    if (hsv.s > 0) wheel.h = hsv.h;
+    wheel.s = hsv.s;
+    wheel.v = hsv.v;
+    $('colorValue').value = String(Math.round(wheel.v * 100));
+    commitWheel(syncHexBox !== false, adopt);
+  }
+
+  /**
+   * Pushes the wheel's HSV out to the marker, the preview and the hex box.
+   * `adopt` is false when merely seeding the wheel from the current colour:
+   * opening the picker must not silently turn a palette list into a custom one.
+   */
+  function commitWheel(syncHexBox, adopt) {
+    const hex = L.hsvToHex(wheel.h, wheel.s, wheel.v);
+    const el = $('colorWheel');
+    const radius = el.clientWidth / 2;
+    // Hue is measured clockwise from the top, matching the conic gradient.
+    const angle = (wheel.h - 90) * (Math.PI / 180);
+    $('wheelMarker').style.left = (radius + Math.cos(angle) * wheel.s * radius) + 'px';
+    $('wheelMarker').style.top = (radius + Math.sin(angle) * wheel.s * radius) + 'px';
+    $('wheelMarker').style.background = hex;
+    $('wheelShade').style.opacity = String(1 - wheel.v);
+    $('colorPreview').style.setProperty('--preview', hex);
+    el.setAttribute('aria-valuetext', hex);
+    if (syncHexBox) $('colorHex').value = hex;
+    showColorError('');
+    if (adopt === false) return;
+    ui.draftColor = hex;
+    syncCustomSwatch();
+  }
+
+  /**
+   * Recolours the custom swatch in place. A drag fires this per pointer move, so
+   * rebuilding the whole row each time would be wasted work.
+   */
+  function syncCustomSwatch() {
+    const box = $('swatches');
+    const existing = box.querySelector('.swatch[data-custom]');
+    if (!existing) {
+      buildSwatches();
+      return;
+    }
+    existing.dataset.color = ui.draftColor;
+    existing.style.setProperty('--list-color', ui.draftColor);
+    existing.setAttribute('aria-label', 'Custom colour ' + ui.draftColor);
+    for (const sw of box.children) {
+      sw.setAttribute('aria-pressed', String(sw.dataset.color === ui.draftColor));
+    }
+  }
+
+  /** Maps a point in the wheel to hue and saturation, clamped to its edge. */
+  function pointToWheel(clientX, clientY) {
+    const el = $('colorWheel');
+    const box = el.getBoundingClientRect();
+    const radius = box.width / 2;
+    const dx = clientX - (box.left + radius);
+    const dy = clientY - (box.top + radius);
+    wheel.h = (Math.atan2(dy, dx) * (180 / Math.PI) + 90 + 360) % 360;
+    wheel.s = Math.min(1, Math.hypot(dx, dy) / radius);
+    commitWheel(true);
+  }
+
+  let wheelDrag = null;
+  const wheelEl = $('colorWheel');
+
+  wheelEl.addEventListener('pointerdown', (e) => {
+    wheelDrag = e.pointerId;
+    wheelEl.setPointerCapture(e.pointerId);
+    pointToWheel(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+
+  wheelEl.addEventListener('pointermove', (e) => {
+    if (wheelDrag !== e.pointerId) return;
+    pointToWheel(e.clientX, e.clientY);
+  });
+
+  for (const end of ['pointerup', 'pointercancel']) {
+    wheelEl.addEventListener(end, (e) => {
+      if (wheelDrag !== e.pointerId) return;
+      if (wheelEl.hasPointerCapture(e.pointerId)) wheelEl.releasePointerCapture(e.pointerId);
+      wheelDrag = null;
+    });
+  }
+
+  // A wheel is a pointer instrument, so give it a keyboard equivalent rather
+  // than leaving the hex box as the only way in.
+  wheelEl.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 1 : 5;
+    const moves = {
+      ArrowLeft: () => { wheel.h -= step; },
+      ArrowRight: () => { wheel.h += step; },
+      ArrowUp: () => { wheel.s = Math.min(1, wheel.s + step / 100); },
+      ArrowDown: () => { wheel.s = Math.max(0, wheel.s - step / 100); },
+    };
+    if (!moves[e.key]) return;
+    e.preventDefault();
+    moves[e.key]();
+    wheel.h = ((wheel.h % 360) + 360) % 360;
+    commitWheel(true);
+  });
+
+  $('colorValue').addEventListener('input', (e) => {
+    wheel.v = Number(e.target.value) / 100;
+    commitWheel(true);
+  });
+
+  function applyTypedHex(raw, syncHexBox) {
     const hex = L.normalizeHex(raw);
     if (!hex) {
       // Say so rather than quietly keeping the old colour.
       showColorError('That is not a colour code. Try something like #4dd0c4.');
       return;
     }
-    showColorError('');
-    ui.draftColor = hex;
-    $('colorPicker').value = hex;
-    if (!fromPicker) $('colorHex').value = hex;
-    buildSwatches();
+    setWheelFromHex(hex, syncHexBox);
   }
-
-  $('colorPicker').addEventListener('input', (e) => {
-    $('colorHex').value = e.target.value;
-    applyCustomColor(e.target.value, true);
-  });
 
   $('colorHex').addEventListener('input', (e) => {
     const value = e.target.value.trim();
     // Only complain once there is enough typed to be a colour at all.
-    if (L.normalizeHex(value)) applyCustomColor(value, false);
+    // Do not rewrite the box mid-keystroke; normalising happens on blur or Enter.
+    if (L.normalizeHex(value)) applyTypedHex(value, false);
     else showColorError('');
   });
 
   $('colorHex').addEventListener('blur', (e) => {
     const value = e.target.value.trim();
-    if (value && !L.normalizeHex(value)) applyCustomColor(value, false);
+    // An emptied box is someone abandoning the edit, not an error worth shouting about.
+    if (!value) {
+      e.target.value = L.hsvToHex(wheel.h, wheel.s, wheel.v);
+      showColorError('');
+      return;
+    }
+    applyTypedHex(value, true);
   });
 
   $('colorHex').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     // Enter inside the dialog would otherwise submit the form mid-edit.
     e.preventDefault();
-    applyCustomColor(e.target.value, false);
+    applyTypedHex(e.target.value, true);
   });
 
   function openListDialog(list) {

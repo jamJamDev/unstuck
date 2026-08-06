@@ -82,6 +82,43 @@ var UnstuckLogic = (() => {
   const isCustomColor = (color) => typeof color === 'string' && color.charAt(0) === '#';
 
   /**
+   * HSV is what a colour wheel is: hue around it, saturation out from the middle,
+   * brightness on its own. Kept here rather than in the picker so the conversions
+   * can be tested without a DOM.
+   * h is 0-360 (wrapping), s and v are 0-1.
+   */
+  function hsvToHex(h, s, v) {
+    const hue = ((h % 360) + 360) % 360;
+    const sat = Math.min(1, Math.max(0, s));
+    const val = Math.min(1, Math.max(0, v));
+    const c = val * sat;
+    const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+    const m = val - c;
+    const sector = Math.floor(hue / 60) % 6;
+    const rgb = [
+      [c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x],
+    ][sector];
+    return '#' + rgb.map((channel) => Math.round((channel + m) * 255).toString(16).padStart(2, '0')).join('');
+  }
+
+  function hexToHsv(value) {
+    const hex = normalizeHex(value);
+    if (!hex) return null;
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+
+    let h = 0;
+    if (d !== 0) {
+      if (max === r) h = 60 * (((g - b) / d) % 6);
+      else if (max === g) h = 60 * ((b - r) / d + 2);
+      else h = 60 * ((r - g) / d + 4);
+    }
+    return { h: ((h % 360) + 360) % 360, s: max === 0 ? 0 : d / max, v: max };
+  }
+
+  /**
    * Resolves whatever shape a payload carries — current or schema 1 — into the
    * kind plus its two independent display choices. Schema 1's `checklist` was
    * both of those switched on at once, which is why it felt like a kind.
@@ -336,7 +373,7 @@ var UnstuckLogic = (() => {
   return {
     SCHEMA, STORE_KEY, COLORS, KIND_LABEL, HISTORY_LIMIT, STARTER_LISTS,
     uid, emptyState, newItem, newList, listFromStarter, migrate, resolveKind,
-    normalizeHex, normalizeColor, isCustomColor,
+    normalizeHex, normalizeColor, isCustomColor, hsvToHex, hexToHsv,
     setDone, logSession,
     listById, isPickable, pickableCount, activeLists, pool,
     recentDepth, chooseFrom, pushHistory,

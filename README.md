@@ -62,11 +62,11 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (60 checks, `node --test`, zero dependencies) — validation and coercion
+- **`tests/logic.test.js`** (66 checks, `node --test`, zero dependencies) — validation and coercion
   in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
   selection scoping, the starter-list definitions, the done/count linkage, and the pick algorithm
   with an injected RNG so every branch is deterministic.
-- **`tests/dom.test.html`** (30 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/dom.test.html`** (33 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was ticked, that a kind change keeps every item, that the two display switches are
@@ -118,6 +118,16 @@ An Ongoing list never strikes anything out or shows a Done section, whatever `do
 `c-<name>` class; a custom one sets the `--list-color` CSS variable directly, which is why every hex
 is normalised and re-validated at both the storage boundary (`migrate`) and the render boundary
 (`paintColor`) — a colour string reaches a stylesheet, so it is never passed through unchecked.
+
+The **+** swatch opens a colour wheel: hue clockwise from the top, saturation outwards from the
+white centre, brightness on its own slider, with a hex box for exact values. The wheel is drawn with
+a `conic-gradient` and a `radial-gradient` rather than a canvas, so it stays crisp at any pixel
+density and needs no redraw — only the marker moves and a black overlay's opacity tracks brightness.
+The HSV conversions live in `logic.js` and are unit-tested; the picker itself only does geometry.
+Hue and saturation are held as wheel state rather than re-derived from the hex, so dragging through
+grey does not lose the angle. Seeding the wheel from the current colour deliberately does *not*
+adopt it — opening the picker and closing it must leave a palette list on its palette colour.
+Arrow keys drive the wheel too, since a wheel is otherwise pointer-only.
 
 **Starter lists** (offered on a first run, and any time from the Lists screen) are themed, with the
 kind that suits them already set: Around the house, Productive, Creative, Get outside, Rest, Learn

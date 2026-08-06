@@ -166,6 +166,51 @@ test('a custom colour is distinguishable from a palette name', () => {
   assert.equal(L.isCustomColor(undefined), false);
 });
 
+test('hsvToHex hits the primaries exactly', () => {
+  assert.equal(L.hsvToHex(0, 1, 1), '#ff0000');
+  assert.equal(L.hsvToHex(60, 1, 1), '#ffff00');
+  assert.equal(L.hsvToHex(120, 1, 1), '#00ff00');
+  assert.equal(L.hsvToHex(180, 1, 1), '#00ffff');
+  assert.equal(L.hsvToHex(240, 1, 1), '#0000ff');
+  assert.equal(L.hsvToHex(300, 1, 1), '#ff00ff');
+  assert.equal(L.hsvToHex(360, 1, 1), '#ff0000', 'the wheel wraps');
+});
+
+test('hsvToHex handles the colourless cases', () => {
+  assert.equal(L.hsvToHex(0, 0, 1), '#ffffff', 'no saturation is white');
+  assert.equal(L.hsvToHex(200, 0.5, 0), '#000000', 'no brightness is black whatever the hue');
+  assert.equal(L.hsvToHex(0, 0, 0.5), '#808080');
+});
+
+test('hsvToHex clamps rather than producing a broken colour', () => {
+  assert.equal(L.hsvToHex(-60, 1, 1), '#ff00ff', 'a negative angle wraps round');
+  assert.equal(L.hsvToHex(720, 1, 1), '#ff0000');
+  assert.equal(L.hsvToHex(0, 5, 5), '#ff0000', 'out-of-range saturation and value clamp');
+  assert.equal(L.hsvToHex(0, -1, -1), '#000000');
+});
+
+test('a colour survives the trip out to the wheel and back', () => {
+  for (const hex of ['#4dd0c4', '#f4a13c', '#8b9cf7', '#00ff88', '#123456', '#ffffff', '#000000', '#7f7f7f']) {
+    const hsv = L.hexToHsv(hex);
+    assert.equal(L.hsvToHex(hsv.h, hsv.s, hsv.v), hex, hex + ' did not round-trip');
+  }
+});
+
+test('hexToHsv refuses what is not a colour, and takes what normalizeHex takes', () => {
+  assert.equal(L.hexToHsv('nonsense'), null);
+  assert.equal(L.hexToHsv(''), null);
+  assert.deepEqual(L.hexToHsv('#0f8'), L.hexToHsv('#00ff88'), 'shorthand is the same colour');
+});
+
+test('grey has no meaningful hue, and says so as zero', () => {
+  const grey = L.hexToHsv('#808080');
+  assert.equal(grey.s, 0, 'no saturation');
+  assert.equal(grey.h, 0);
+  const black = L.hexToHsv('#000000');
+  assert.equal(black.v, 0);
+  assert.equal(black.s, 0, 'saturation is undefined at zero brightness, not NaN');
+});
+
 test('migrate keeps a valid custom colour and normalises it', () => {
   const out = L.migrate({ lists: [{ name: 'X', color: '#FF5C8A', items: [] }] });
   assert.equal(out.lists[0].color, '#ff5c8a');

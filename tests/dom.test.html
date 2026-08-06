@@ -106,6 +106,19 @@
     'a pick to settle'
   );
 
+  /** Boots a one-list app and opens its colour picker, ready to drive. */
+  async function openColourPicker() {
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.$('editListBtn').click();
+    await waitFor(() => app.$('listDialog').open, 'the edit dialog');
+    app.$('addColorBtn').click();
+    await waitFor(() => shown(app.win, app.$('colorWheel')), 'the colour wheel');
+    return app;
+  }
+
   function listOf(kind, name, texts, display) {
     return {
       id: 'l-' + name, name, kind, color: 'sky',
@@ -489,6 +502,70 @@
     app.$('tabDecide').click();
     equal(app.doc.querySelectorAll('#chips .chip')[1].style.getPropertyValue('--list-color'), '#00ff88',
       'the chip must follow too');
+  });
+
+  test('the colour wheel maps where you press to the colour you get', async () => {
+    const app = await openColourPicker();
+    const el = app.$('colorWheel');
+    const box = el.getBoundingClientRect();
+    const r = box.width / 2;
+    const press = (dx, dy) => {
+      // Hue runs clockwise from the top: right is 90 degrees, bottom 180, left 270.
+      el.dispatchEvent(new app.win.PointerEvent('pointerdown', {
+        pointerId: 1, bubbles: true, clientX: box.left + r + dx, clientY: box.top + r + dy,
+      }));
+      el.dispatchEvent(new app.win.PointerEvent('pointerup', { pointerId: 1, bubbles: true }));
+      return Math.round(app.win.UnstuckLogic.hexToHsv(app.$('colorHex').value).h);
+    };
+
+    const right = press(r * 0.9, 0);
+    assert(Math.abs(right - 90) <= 2, 'the right edge should be hue 90, got ' + right);
+    const bottom = press(0, r * 0.9);
+    assert(Math.abs(bottom - 180) <= 2, 'the bottom should be hue 180, got ' + bottom);
+    const left = press(-r * 0.9, 0);
+    assert(Math.abs(left - 270) <= 2, 'the left edge should be hue 270, got ' + left);
+
+    // The centre is white: no saturation, whatever the angle.
+    press(0, 0);
+    equal(app.win.UnstuckLogic.hexToHsv(app.$('colorHex').value).s, 0, 'the middle must be unsaturated');
+  });
+
+  test('the wheel is usable from the keyboard, not pointer-only', async () => {
+    const app = await openColourPicker();
+    app.$('colorHex').value = '#ff0000';
+    app.$('colorHex').dispatchEvent(new app.win.Event('input', { bubbles: true }));
+    const hueNow = () => Math.round(app.win.UnstuckLogic.hexToHsv(app.$('colorHex').value).h);
+    const satNow = () => app.win.UnstuckLogic.hexToHsv(app.$('colorHex').value).s;
+
+    const key = (k) => app.$('colorWheel').dispatchEvent(
+      new app.win.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+
+    key('ArrowRight');
+    equal(hueNow(), 5, 'right should advance the hue');
+    key('ArrowLeft');
+    key('ArrowLeft');
+    equal(hueNow(), 355, 'and it should wrap past zero rather than clamp');
+
+    const before = satNow();
+    key('ArrowDown');
+    assert(satNow() < before, 'down should weaken the colour');
+    key('ArrowUp');
+    assert(Math.abs(satNow() - before) < 0.001, 'up should put it back');
+  });
+
+  test('brightness dims the colour without losing the hue', async () => {
+    const app = await openColourPicker();
+    app.$('colorHex').value = '#00ff88';
+    app.$('colorHex').dispatchEvent(new app.win.Event('input', { bubbles: true }));
+    const hueBefore = Math.round(app.win.UnstuckLogic.hexToHsv(app.$('colorHex').value).h);
+
+    app.$('colorValue').value = '40';
+    app.$('colorValue').dispatchEvent(new app.win.Event('input', { bubbles: true }));
+
+    const after = app.win.UnstuckLogic.hexToHsv(app.$('colorHex').value);
+    equal(Math.round(after.h), hueBefore, 'the hue must survive a brightness change');
+    equal(Math.round(after.v * 100), 40);
+    equal(app.$('wheelShade').style.opacity, '0.6', 'the wheel itself must dim to match');
   });
 
   test('an unusable colour code is refused out loud, not silently ignored', async () => {
