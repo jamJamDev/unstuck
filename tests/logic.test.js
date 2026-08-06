@@ -134,6 +134,51 @@ test('migrate survives a missing items array', () => {
   assert.deepEqual(out.lists[0].items, []);
 });
 
+// ---------------------------------------------------------------- colours
+
+test('normalizeHex accepts the forms people actually type', () => {
+  assert.equal(L.normalizeHex('#4dd0c4'), '#4dd0c4');
+  assert.equal(L.normalizeHex('4dd0c4'), '#4dd0c4', 'a missing hash is not a mistake worth rejecting');
+  assert.equal(L.normalizeHex('#4DD0C4'), '#4dd0c4', 'case is normalised');
+  assert.equal(L.normalizeHex('  #4dd0c4  '), '#4dd0c4');
+  assert.equal(L.normalizeHex('#0f8'), '#00ff88', 'shorthand expands');
+  assert.equal(L.normalizeHex('0f8'), '#00ff88');
+});
+
+test('normalizeHex refuses anything that is not a colour', () => {
+  const bad = ['', '   ', 'red', '#12345', '#1234567', '#gggggg', 'rgb(1,2,3)', null, undefined, 42, {},
+    '#fff;background:url(x)', 'var(--x)', 'javascript:alert(1)'];
+  for (const value of bad) {
+    assert.equal(L.normalizeHex(value), null, 'accepted ' + JSON.stringify(value));
+  }
+});
+
+test('normalizeColor takes palette names and hexes, and nothing else', () => {
+  assert.equal(L.normalizeColor('sky'), 'sky');
+  assert.equal(L.normalizeColor('#0f8'), '#00ff88');
+  assert.equal(L.normalizeColor('chartreuse'), null);
+  assert.equal(L.normalizeColor('expression(alert(1))'), null);
+});
+
+test('a custom colour is distinguishable from a palette name', () => {
+  assert.equal(L.isCustomColor('#00ff88'), true);
+  assert.equal(L.isCustomColor('sky'), false);
+  assert.equal(L.isCustomColor(undefined), false);
+});
+
+test('migrate keeps a valid custom colour and normalises it', () => {
+  const out = L.migrate({ lists: [{ name: 'X', color: '#FF5C8A', items: [] }] });
+  assert.equal(out.lists[0].color, '#ff5c8a');
+});
+
+test('migrate refuses a colour that could leak into the stylesheet', () => {
+  // This value reaches a CSS custom property, so a bad one must never survive.
+  const out = L.migrate({
+    lists: [{ name: 'X', color: '#fff; background-image: url(https://evil.example/pixel)', items: [] }],
+  });
+  assert.equal(out.lists[0].color, L.COLORS[0], 'fell back to a safe palette colour');
+});
+
 // ------------------------------------------------------------------- pool
 
 test('an endless list keeps its items in the pool even when flagged done', () => {

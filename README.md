@@ -62,11 +62,11 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (54 checks, `node --test`, zero dependencies) — validation and coercion
-  in `migrate` including the schema 1 upgrade, pool membership per kind, selection scoping, the
-  starter-list definitions, the done/count linkage, and the pick algorithm with an injected RNG so
-  every branch is deterministic.
-- **`tests/dom.test.html`** (27 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/logic.test.js`** (60 checks, `node --test`, zero dependencies) — validation and coercion
+  in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
+  selection scoping, the starter-list definitions, the done/count linkage, and the pick algorithm
+  with an injected RNG so every branch is deterministic.
+- **`tests/dom.test.html`** (30 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was ticked, that a kind change keeps every item, that the two display switches are
@@ -101,7 +101,7 @@ left. Schema 1 had a third kind, `checklist`, which was only ever these two swit
 together — which is exactly why it felt like a duplicate of `todo` in use. The picker cannot tell
 any of it apart; only `kind` ever reaches it.
 
-**The kind is not a commitment.** Change it whenever, from Rename & colour — you rarely know which
+**The kind is not a commitment.** Change it whenever, from Edit list — you rarely know which
 mechanic fits until you have lived with a list.
 
 Switching is lossless because `done` and `count` are two readings of one fact — *how many times has
@@ -113,6 +113,11 @@ this been finished* — and are kept in step:
   untick something with ten logged sessions and all ten survive.
 
 An Ongoing list never strikes anything out or shows a Done section, whatever `done` says underneath.
+
+**Colour** is either one of eight palette names or a custom `#rrggbb`. A palette colour rides on a
+`c-<name>` class; a custom one sets the `--list-color` CSS variable directly, which is why every hex
+is normalised and re-validated at both the storage boundary (`migrate`) and the render boundary
+(`paintColor`) — a colour string reaches a stylesheet, so it is never passed through unchecked.
 
 **Starter lists** (offered on a first run, and any time from the Lists screen) are themed, with the
 kind that suits them already set: Around the house, Productive, Creative, Get outside, Rest, Learn

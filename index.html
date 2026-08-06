@@ -743,7 +743,51 @@ dialog .dlg-actions {
 
 .seg-note { margin: 7px 2px 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 
+/* The two display choices are their own question; give them room to read as one. */
+#keepField, #progressField { margin-top: 26px; }
+
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.swatch.add {
+  background: var(--surface-2);
+  border: 1px dashed #5a6472;
+  color: var(--muted);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.swatch.add:hover { border-color: var(--accent); color: var(--text); }
+.swatch.add[aria-expanded="true"] { border-style: solid; border-color: var(--accent); color: var(--accent); }
+
+.custom-color {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.custom-color input[type="color"] {
+  width: 46px;
+  height: 44px;
+  flex: none;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.custom-color input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.custom-color input[type="text"]:focus { border-color: var(--accent); outline: none; }
+.custom-color input[type="text"][aria-invalid="true"] { border-color: var(--bad); }
 .swatch {
   width: 38px; height: 38px;
   border-radius: 50%;
@@ -904,7 +948,7 @@ dialog .dlg-actions {
       </div>
 
       <div class="detail-foot">
-        <button id="editListBtn" class="btn">Rename &amp; colour</button>
+        <button id="editListBtn" class="btn">Edit list</button>
         <button id="deleteListBtn" class="btn danger">Delete list</button>
       </div>
     </section>
@@ -971,6 +1015,12 @@ dialog .dlg-actions {
     <div class="field">
       <span>Colour</span>
       <div class="swatches" id="swatches" role="group" aria-label="List colour"></div>
+      <div class="custom-color" id="customColor" hidden>
+        <input type="color" id="colorPicker" aria-label="Pick a colour">
+        <input type="text" id="colorHex" maxlength="7" placeholder="#4dd0c4" autocomplete="off"
+               spellcheck="false" aria-label="Hex colour code" aria-describedby="colorError">
+      </div>
+      <p class="seg-note" id="colorError" role="alert" hidden></p>
     </div>
 
     <div class="dlg-actions">
@@ -1041,6 +1091,28 @@ dialog .dlg-actions {
   let session = { shown: new Set(), current: null, settled: false, gen: 0 };
   let pendingUndo = null;
   let toastTimer = 0;
+
+  /**
+   * A palette colour rides on its `c-<name>` class; a custom one sets the CSS
+   * variable directly. The value is re-validated here because this is the point
+   * it reaches the stylesheet — a bad string must never be written through.
+   */
+  function paintColor(el, baseClass, color) {
+    const safe = L.normalizeColor(color);
+    if (!safe) {
+      console.warn('Unstuck: refusing to paint an invalid colour', color);
+      el.className = baseClass + ' c-' + COLORS[0];
+      el.style.removeProperty('--list-color');
+      return;
+    }
+    if (L.isCustomColor(safe)) {
+      el.className = baseClass;
+      el.style.setProperty('--list-color', safe);
+    } else {
+      el.className = baseClass + ' c-' + safe;
+      el.style.removeProperty('--list-color');
+    }
+  }
 
   const listById = (id) => L.listById(state, id);
   const activeLists = () => L.activeLists(state);
@@ -1254,7 +1326,7 @@ dialog .dlg-actions {
     box.firstElementChild.setAttribute('aria-pressed', String(state.selection.length === 0));
     state.lists.forEach((list, i) => {
       const chip = box.children[i + 1];
-      chip.className = 'chip c-' + list.color;
+      paintColor(chip, 'chip', list.color);
       chip.setAttribute('aria-pressed', String(state.selection.includes(list.id)));
       // childNodes: [dot, name text, count] — a rename must reach the text node.
       chip.childNodes[1].nodeValue = list.name;
@@ -1284,7 +1356,7 @@ dialog .dlg-actions {
     for (const list of state.lists) {
       const card = document.createElement('button');
       card.type = 'button';
-      card.className = 'list-card c-' + list.color;
+      paintColor(card, 'list-card', list.color);
       card.addEventListener('click', () => openList(list.id));
 
       const body = document.createElement('div');
@@ -1326,14 +1398,14 @@ dialog .dlg-actions {
 
   function renderDetail(list) {
     const title = $('detailTitle');
-    title.className = 'title c-' + list.color;
+    paintColor(title, 'title', list.color);
     title.lastElementChild.textContent = list.name;
 
     $('detailKind').textContent = list.kind === 'endless'
       ? 'Ongoing · nothing is ever finished, it just gets done again'
       : 'Tick off · ' + (list.keepDone ? 'ticked things stay put as a record' : 'finished things move out of the way');
 
-    $('screenList').className = 'screen c-' + list.color;
+    paintColor($('screenList'), 'screen', list.color);
     $('addInput').placeholder = list.kind === 'endless'
       ? 'Add something you keep coming back to'
       : 'Add something to tick off';
@@ -1564,21 +1636,117 @@ dialog .dlg-actions {
   function buildSwatches() {
     const box = $('swatches');
     box.textContent = '';
-    for (const color of COLORS) {
+
+    const swatches = COLORS.slice();
+    // A custom colour joins the row as its own swatch, so it can be reselected
+    // after tapping a palette one without reopening the picker.
+    if (L.isCustomColor(ui.draftColor)) swatches.push(ui.draftColor);
+
+    for (const color of swatches) {
       const sw = document.createElement('button');
       sw.type = 'button';
-      sw.className = 'swatch c-' + color;
-      sw.setAttribute('aria-label', color);
+      paintColor(sw, 'swatch', color);
+      sw.dataset.color = color;
+      sw.setAttribute('aria-label', L.isCustomColor(color) ? 'Custom colour ' + color : color);
       sw.setAttribute('aria-pressed', String(color === ui.draftColor));
-      sw.addEventListener('click', () => {
-        ui.draftColor = color;
-        for (const other of box.children) {
-          other.setAttribute('aria-pressed', String(other === sw));
-        }
-      });
+      sw.addEventListener('click', () => selectColor(color));
       box.appendChild(sw);
     }
+
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.id = 'addColorBtn';
+    add.className = 'swatch add';
+    add.textContent = '+';
+    add.setAttribute('aria-label', 'Choose a custom colour');
+    add.setAttribute('aria-expanded', String(!$('customColor').hidden));
+    add.addEventListener('click', toggleCustomColor);
+    box.appendChild(add);
   }
+
+  function selectColor(color) {
+    ui.draftColor = color;
+    for (const sw of $('swatches').children) {
+      sw.setAttribute('aria-pressed', String(sw.dataset.color === color));
+    }
+  }
+
+  function toggleCustomColor() {
+    const row = $('customColor');
+    const opening = row.hidden;
+    row.hidden = !opening;
+    $('addColorBtn').setAttribute('aria-expanded', String(opening));
+    if (!opening) {
+      showColorError('');
+      return;
+    }
+    // Seed both inputs from whatever is selected, resolving a palette name to
+    // its rendered hex rather than duplicating the palette in script.
+    const current = L.isCustomColor(ui.draftColor) ? ui.draftColor : currentSwatchHex();
+    $('colorPicker').value = current;
+    $('colorHex').value = current;
+    $('colorHex').focus();
+    $('colorHex').select();
+  }
+
+  /** Reads the selected palette swatch's rendered colour, in #rrggbb form. */
+  function currentSwatchHex() {
+    const selected = $('swatches').querySelector('[aria-pressed="true"]');
+    if (!selected) return '#f4a13c';
+    const value = getComputedStyle(selected).getPropertyValue('--list-color').trim();
+    return L.normalizeHex(value) || rgbToHex(value) || '#f4a13c';
+  }
+
+  function rgbToHex(value) {
+    const m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/.exec(value);
+    if (!m) return null;
+    return '#' + [1, 2, 3].map((i) => Number(m[i]).toString(16).padStart(2, '0')).join('');
+  }
+
+  function showColorError(message) {
+    const el = $('colorError');
+    el.textContent = message;
+    el.hidden = !message;
+    $('colorHex').setAttribute('aria-invalid', String(Boolean(message)));
+  }
+
+  function applyCustomColor(raw, fromPicker) {
+    const hex = L.normalizeHex(raw);
+    if (!hex) {
+      // Say so rather than quietly keeping the old colour.
+      showColorError('That is not a colour code. Try something like #4dd0c4.');
+      return;
+    }
+    showColorError('');
+    ui.draftColor = hex;
+    $('colorPicker').value = hex;
+    if (!fromPicker) $('colorHex').value = hex;
+    buildSwatches();
+  }
+
+  $('colorPicker').addEventListener('input', (e) => {
+    $('colorHex').value = e.target.value;
+    applyCustomColor(e.target.value, true);
+  });
+
+  $('colorHex').addEventListener('input', (e) => {
+    const value = e.target.value.trim();
+    // Only complain once there is enough typed to be a colour at all.
+    if (L.normalizeHex(value)) applyCustomColor(value, false);
+    else showColorError('');
+  });
+
+  $('colorHex').addEventListener('blur', (e) => {
+    const value = e.target.value.trim();
+    if (value && !L.normalizeHex(value)) applyCustomColor(value, false);
+  });
+
+  $('colorHex').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    // Enter inside the dialog would otherwise submit the form mid-edit.
+    e.preventDefault();
+    applyCustomColor(e.target.value, false);
+  });
 
   function openListDialog(list) {
     ui.editingListId = list ? list.id : null;
@@ -1596,12 +1764,9 @@ dialog .dlg-actions {
     const summary = document.querySelector('input[name="summary"][value="' + (list && list.showProgress ? 'progress' : 'left') + '"]');
     if (summary) summary.checked = true;
     syncKeepField();
-    // Switching kind only changes how items are read, so say so plainly.
-    const note = $('kindNote');
-    note.hidden = !list;
-    if (list) {
-      note.textContent = 'Switching keeps everything — ticks and session counts both survive.';
-    }
+    // The picker starts closed each time; a custom colour is already in the row.
+    $('customColor').hidden = true;
+    showColorError('');
     buildSwatches();
     $('listDialog').showModal();
     $('listName').focus();
@@ -1613,6 +1778,14 @@ dialog .dlg-actions {
     const ticks = Boolean(kind) && kind.value === 'once';
     $('keepField').hidden = !ticks;
     $('progressField').hidden = !ticks;
+
+    // The reassurance about switching only earns its space while switching.
+    const editing = ui.editingListId ? listById(ui.editingListId) : null;
+    const switching = Boolean(editing) && Boolean(kind) && kind.value !== editing.kind;
+    const note = $('kindNote');
+    note.hidden = !switching;
+    if (switching) note.textContent = 'Switching keeps everything — ticks and session counts both survive.';
+
     if (!ticks) return;
 
     // The segmented buttons are short by design, so spell out what each means.
@@ -1696,7 +1869,7 @@ dialog .dlg-actions {
     L.STARTER_LISTS.forEach((spec, i) => {
       const opt = document.createElement('button');
       opt.type = 'button';
-      opt.className = 'starter c-' + spec.color;
+      paintColor(opt, 'starter', spec.color);
       opt.setAttribute('aria-pressed', 'false');
 
       const tick = document.createElement('span');
@@ -1806,7 +1979,7 @@ dialog .dlg-actions {
     const card = $('card');
     const { list, item } = choice;
 
-    card.className = 'card c-' + list.color;
+    paintColor(card, 'card', list.color);
     card.hidden = false;
     card.style.transform = '';
     card.style.opacity = '';

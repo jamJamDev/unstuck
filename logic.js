@@ -61,6 +61,27 @@ var UnstuckLogic = (() => {
   }
 
   /**
+   * A list colour is either a palette name or a custom hex. The hex ends up in a
+   * CSS custom property, so it is normalised to a strict `#rrggbb` here and
+   * anything else is refused rather than passed through to the stylesheet.
+   */
+  function normalizeHex(value) {
+    if (typeof value !== 'string') return null;
+    const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value.trim());
+    if (!m) return null;
+    const digits = m[1].toLowerCase();
+    return '#' + (digits.length === 3 ? digits.replace(/./g, (c) => c + c) : digits);
+  }
+
+  /** The colour to store, or null if it is neither a palette name nor a hex. */
+  function normalizeColor(value) {
+    if (COLORS.includes(value)) return value;
+    return normalizeHex(value);
+  }
+
+  const isCustomColor = (color) => typeof color === 'string' && color.charAt(0) === '#';
+
+  /**
    * Resolves whatever shape a payload carries — current or schema 1 — into the
    * kind plus its two independent display choices. Schema 1's `checklist` was
    * both of those switched on at once, which is why it felt like a kind.
@@ -138,7 +159,7 @@ var UnstuckLogic = (() => {
         id: typeof l.id === 'string' && l.id ? l.id : uid(),
         name: String(l.name || 'Untitled list'),
         ...resolveKind(l.kind, l.keepDone, l.showProgress),
-        color: COLORS.includes(l.color) ? l.color : COLORS[0],
+        color: normalizeColor(l.color) || COLORS[0],
         items: Array.isArray(l.items)
           ? l.items
               .filter((it) => it && typeof it === 'object')
@@ -315,6 +336,7 @@ var UnstuckLogic = (() => {
   return {
     SCHEMA, STORE_KEY, COLORS, KIND_LABEL, HISTORY_LIMIT, STARTER_LISTS,
     uid, emptyState, newItem, newList, listFromStarter, migrate, resolveKind,
+    normalizeHex, normalizeColor, isCustomColor,
     setDone, logSession,
     listById, isPickable, pickableCount, activeLists, pool,
     recentDepth, chooseFrom, pushHistory,

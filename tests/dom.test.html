@@ -461,6 +461,55 @@
     }
   });
 
+  test('a custom colour can be entered as a hex and reaches every surface', async () => {
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.$('editListBtn').click();
+    await waitFor(() => app.$('listDialog').open, 'the edit dialog');
+
+    equal(shown(app.win, app.$('customColor')), false, 'the picker starts closed');
+    app.$('addColorBtn').click();
+    equal(shown(app.win, app.$('customColor')), true);
+    assert(/^#[0-9a-f]{6}$/.test(app.$('colorHex').value), 'seeded from the current colour, got ' + app.$('colorHex').value);
+
+    app.$('colorHex').value = '#0f8';
+    app.$('colorHex').dispatchEvent(new app.win.Event('input', { bubbles: true }));
+    // Shorthand expands, and the custom colour joins the swatch row as selected.
+    equal(app.doc.querySelectorAll('#swatches .swatch:not(.add)').length, 9, 'the custom colour becomes a swatch');
+    equal(app.doc.querySelector('#swatches [aria-pressed="true"]').dataset.color, '#00ff88');
+
+    app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => stored().lists[0].color === '#00ff88', 'the custom colour to save');
+
+    const card = app.doc.querySelector('#listGrid .list-card');
+    equal(card.style.getPropertyValue('--list-color'), '#00ff88', 'the card carries the custom colour');
+    equal(/\bc-[a-z]+/.test(card.className), false, 'and no longer carries a palette class');
+    app.$('tabDecide').click();
+    equal(app.doc.querySelectorAll('#chips .chip')[1].style.getPropertyValue('--list-color'), '#00ff88',
+      'the chip must follow too');
+  });
+
+  test('an unusable colour code is refused out loud, not silently ignored', async () => {
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.$('editListBtn').click();
+    await waitFor(() => app.$('listDialog').open, 'the edit dialog');
+    app.$('addColorBtn').click();
+
+    app.$('colorHex').value = 'not a colour';
+    app.$('colorHex').dispatchEvent(new app.win.Event('blur', { bubbles: true }));
+    equal(shown(app.win, app.$('colorError')), true, 'the user must be told');
+    equal(app.$('colorHex').getAttribute('aria-invalid'), 'true');
+
+    app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => !app.$('listDialog').open, 'the dialog to close');
+    equal(stored().lists[0].color, 'sky', 'the original colour must survive a rejected entry');
+  });
+
   test('an ongoing list offers neither display choice', async () => {
     const app = await boot(stateOf([listOf('endless', 'Keep', ['Guitar'])]));
     app.$('tabLists').click();
