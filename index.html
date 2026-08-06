@@ -637,7 +637,8 @@ dialog .dlg-actions {
   bottom: -20px;
   padding: 12px 0;
   margin-bottom: -20px;
-  background: linear-gradient(to top, var(--surface) 72%, transparent);
+  background: linear-gradient(to top, var(--surface) 78%, transparent);
+  box-shadow: 0 -12px 16px -12px rgba(0, 0, 0, 0.9);
 }
 
 .kind-picker { display: flex; flex-direction: column; gap: 8px; }
@@ -705,6 +706,42 @@ dialog .dlg-actions {
 .starter .body { flex: 1; min-width: 0; }
 .starter .name { font-size: 15px; font-weight: 620; display: flex; align-items: center; gap: 8px; }
 .starter .sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+
+/* Compact two-way choice: the full option cards make the dialog scroll, which
+   hides whatever sits below the sticky action bar. */
+.segmented {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.segmented label {
+  flex: 1;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 8px;
+}
+.segmented input {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.segmented label:has(input:checked) { background: var(--accent); color: var(--accent-ink); }
+.segmented label:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.seg-note { margin: 7px 2px 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .swatch {
@@ -903,11 +940,11 @@ dialog .dlg-actions {
       <div class="kind-picker" role="radiogroup" aria-label="Kind of list">
         <label class="kind-opt">
           <input type="radio" name="kind" value="once" checked>
-          <span><strong>Tick off</strong><small>Finishing something takes it out of the hat. Chores, books, errands.</small></span>
+          <span><strong>Tick off</strong><small>Finishing it takes it out of the hat.</small></span>
         </label>
         <label class="kind-opt">
           <input type="radio" name="kind" value="endless">
-          <span><strong>Ongoing</strong><small>Never finished, just done again. Practise guitar, go for a walk.</small></span>
+          <span><strong>Ongoing</strong><small>Never finished, just done again.</small></span>
         </label>
       </div>
       <p class="field-note" id="kindNote" hidden></p>
@@ -915,30 +952,20 @@ dialog .dlg-actions {
 
     <div class="field" id="keepField">
       <span>Once something's ticked off</span>
-      <div class="kind-picker" role="radiogroup" aria-label="What happens to finished things">
-        <label class="kind-opt">
-          <input type="radio" name="keep" value="clear" checked>
-          <span><strong>Move it out of the way</strong><small>Finished things drop into a Done pile you can clear out.</small></span>
-        </label>
-        <label class="kind-opt">
-          <input type="radio" name="keep" value="record">
-          <span><strong>Keep it as a record</strong><small>It stays put, ticked, so the list is the tally of what you've done.</small></span>
-        </label>
+      <div class="segmented" role="radiogroup" aria-label="What happens to finished things">
+        <label><input type="radio" name="keep" value="clear" checked><span>Move it away</span></label>
+        <label><input type="radio" name="keep" value="record"><span>Keep it listed</span></label>
       </div>
+      <p class="seg-note" id="keepNote"></p>
     </div>
 
     <div class="field" id="progressField">
       <span>How the list reads</span>
-      <div class="kind-picker" role="radiogroup" aria-label="How the list summarises itself">
-        <label class="kind-opt">
-          <input type="radio" name="summary" value="left" checked>
-          <span><strong>What's left</strong><small>"10 things left" — for lists you want to get to the bottom of.</small></span>
-        </label>
-        <label class="kind-opt">
-          <input type="radio" name="summary" value="progress">
-          <span><strong>How far through</strong><small>"2 of 12 done", with a progress bar — for lists you're working through.</small></span>
-        </label>
+      <div class="segmented" role="radiogroup" aria-label="How the list summarises itself">
+        <label><input type="radio" name="summary" value="left" checked><span>What's left</span></label>
+        <label><input type="radio" name="summary" value="progress"><span>Progress bar</span></label>
       </div>
+      <p class="seg-note" id="summaryNote"></p>
     </div>
 
     <div class="field">
@@ -1558,8 +1585,8 @@ dialog .dlg-actions {
     ui.draftColor = list ? list.color : COLORS[state.lists.length % COLORS.length];
     $('listDialogTitle').textContent = list ? 'Edit list' : 'New list';
     $('listDialogSub').textContent = list
-      ? 'Change anything here at any time — the name, the colour, or how finishing works.'
-      : 'Name it after what it is about; the kind decides how finishing works.';
+      ? 'Change any of this whenever you like.'
+      : 'Name it after what it is about.';
     $('listName').value = list ? list.name : '';
     $('listSave').textContent = list ? 'Save' : 'Create list';
     const checked = document.querySelector('input[name="kind"][value="' + (list ? list.kind : 'once') + '"]');
@@ -1573,8 +1600,7 @@ dialog .dlg-actions {
     const note = $('kindNote');
     note.hidden = !list;
     if (list) {
-      note.textContent = 'Switching this keeps everything in the list. Ticked items rejoin the pool as Ongoing, '
-        + 'and go back to being ticked if you switch back. Session counts are kept either way.';
+      note.textContent = 'Switching keeps everything — ticks and session counts both survive.';
     }
     buildSwatches();
     $('listDialog').showModal();
@@ -1587,9 +1613,21 @@ dialog .dlg-actions {
     const ticks = Boolean(kind) && kind.value === 'once';
     $('keepField').hidden = !ticks;
     $('progressField').hidden = !ticks;
+    if (!ticks) return;
+
+    // The segmented buttons are short by design, so spell out what each means.
+    const keep = document.querySelector('input[name="keep"]:checked');
+    $('keepNote').textContent = keep && keep.value === 'record'
+      ? 'They stay listed, struck through, as a record.'
+      : 'They drop into a Done pile you can clear out.';
+
+    const summary = document.querySelector('input[name="summary"]:checked');
+    $('summaryNote').textContent = summary && summary.value === 'progress'
+      ? 'Shows "2 of 12 done" with a progress bar.'
+      : 'Shows "10 things left".';
   }
 
-  for (const radio of document.querySelectorAll('input[name="kind"]')) {
+  for (const radio of document.querySelectorAll('input[name="kind"], input[name="keep"], input[name="summary"]')) {
     radio.addEventListener('change', syncKeepField);
   }
 

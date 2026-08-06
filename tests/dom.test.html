@@ -441,6 +441,26 @@
     equal(shown(app.win, app.$('untickAllBtn')), false, 'a swept list clears its pile instead of unticking');
   });
 
+  test('both display options are on screen when the edit dialog opens', async () => {
+    // Regression: they were present and not display:none, but sat ~800px down a
+    // scrolling dialog whose sticky action bar made it look finished. "Rendered"
+    // is not the same as "findable", and the rig is phone-sized on purpose.
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    app.$('editListBtn').click();
+    await waitFor(() => app.$('listDialog').open, 'the edit dialog');
+
+    const viewport = app.win.innerHeight;
+    for (const id of ['keepField', 'progressField']) {
+      const r = app.$(id).getBoundingClientRect();
+      assert(r.top >= 0 && r.bottom <= viewport,
+        id + ' is off screen at ' + app.win.innerWidth + 'x' + viewport
+        + ' (top ' + Math.round(r.top) + ', bottom ' + Math.round(r.bottom) + ')');
+    }
+  });
+
   test('an ongoing list offers neither display choice', async () => {
     const app = await boot(stateOf([listOf('endless', 'Keep', ['Guitar'])]));
     app.$('tabLists').click();
