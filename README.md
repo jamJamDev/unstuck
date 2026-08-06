@@ -25,7 +25,7 @@ the browser only — for a real "Add to Home Screen" install, host the folder on
 Netlify.
 
 **Editing gotcha:** `sw.js` is network-first, but browsers still cache aggressively. After an edit,
-hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v3`), or load with a `?v=N`
+hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v4`), or load with a `?v=N`
 cache-buster. If a change seems not to apply, this is almost always why.
 
 ## Layout
@@ -62,11 +62,11 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (66 checks, `node --test`, zero dependencies) — validation and coercion
+- **`tests/logic.test.js`** (81 checks, `node --test`, zero dependencies) — validation and coercion
   in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
   selection scoping, the starter-list definitions, the done/count linkage, and the pick algorithm
   with an injected RNG so every branch is deterministic.
-- **`tests/dom.test.html`** (33 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/dom.test.html`** (43 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was ticked, that a kind change keeps every item, that the two display switches are
@@ -136,6 +136,49 @@ they are ordinary lists afterwards, editable and deletable like any other. The o
 are a matter of taste (books, films) arrive empty on purpose; a suggested reading list would just be
 someone else's.
 
+## Timers
+
+A list can carry a standing timer length (Edit list → Timer). Accepting a pick from that list starts
+it automatically — no prompt, no duration to choose, because the point of setting one is that you
+already decided. A list without one shows `15 / 30 / 45 / 1 hour` on the accepted card instead, so
+timing it ad hoc costs one tap. "Set a timer" on the Decide screen covers timing something that was
+never a pick.
+
+While it runs, a bar above the tab bar shows the countdown with pause, +5 and stop, on every screen
+and within thumb reach.
+
+A timer is stored as **the moment it ends**, not as a countdown, so it stays correct across a reload
+or a phone that suspended the tab. When it finishes it plays a tone, vibrates, and posts a
+notification if one was permitted.
+
+**The honest limit:** phones suspend a backgrounded web app's timers. The remaining time is always
+right when you come back, and it rings reliably while the app is open — but a dependable alarm with
+the phone in your pocket needs the native wrap, not a web page.
+
+## Accessibility
+
+Settings (the gear) carries:
+
+- **Text size** — Normal / Large / Larger. Every `font-size` in the stylesheet is in `rem`, so one
+  root-level multiplier scales the whole app.
+- **Animation** — Match phone / On / Off. "Match phone" follows `prefers-reduced-motion`; the other
+  two override it, and both the riffle and the card fly-out obey the result.
+- **Read the pick aloud** — speaks the pick through `speechSynthesis`, so you can hit the button and
+  hear the answer without looking.
+- **Higher contrast** — brightens the muted secondary text and strengthens borders.
+
+Not built on purpose: **voice-to-text**. Android's keyboard mic already dictates into every field
+here, and the Web Speech API is Chrome-only and sends audio off-device. Reimplementing it would be
+strictly worse than what the phone already does.
+
+One-handed use gets its own attention, since this app is used standing in a kitchen:
+
+- The **system back gesture** leaves a list instead of the app — opening a list pushes a history
+  entry, and the in-app back arrow goes through the same path so both behave identically.
+- The **add field is pinned to the bottom** of the list screen, not the top: it is the most-used
+  control there, and the top of a phone is the hardest place to reach.
+- **Dialogs are bottom sheets** on phone-width screens, so their controls land under the thumb.
+
 ## How picking works
 
 `pool()` is every pickable item across the **selected** lists — the chips at the top of the Decide
@@ -176,7 +219,9 @@ One `localStorage` key, `unstuck.v1`:
 ```jsonc
 {
   "schema": 2,
-  "lists": [{ "id", "name", "kind", "color", "keepDone", "showProgress", "items": [
+  "settings": { "textScale", "contrast", "motion", "speak" },
+  "timer": { "duration", "endsAt", "label", "pausedAt" } | null,
+  "lists": [{ "id", "name", "kind", "color", "keepDone", "showProgress", "timerMinutes", "items": [
     { "id", "text", "done", "doneAt", "count", "lastDone" }
   ]}],
   "selection": ["<list id>"],   // empty = every list

@@ -466,7 +466,7 @@
     await waitFor(() => app.$('listDialog').open, 'the edit dialog');
 
     const viewport = app.win.innerHeight;
-    for (const id of ['keepField', 'progressField']) {
+    for (const id of ['keepField', 'progressField', 'listTimer']) {
       const r = app.$(id).getBoundingClientRect();
       assert(r.top >= 0 && r.bottom <= viewport,
         id + ' is off screen at ' + app.win.innerWidth + 'x' + viewport
@@ -585,6 +585,145 @@
     app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
     await waitFor(() => !app.$('listDialog').open, 'the dialog to close');
     equal(stored().lists[0].color, 'sky', 'the original colour must survive a rejected entry');
+  });
+
+  test('a list with a standing timer starts one on accept, with no extra taps', async () => {
+    const books = listOf('once', 'Books', ['Piranesi'], { keepDone: true });
+    books.timerMinutes = 30;
+    const app = await boot(stateOf([books]));
+    app.$('pickBtn').click();
+    await settled(app);
+    equal(shown(app.win, app.$('timerBar')), false, 'nothing runs before accepting');
+
+    app.$('doBtn').click();
+    await waitFor(() => shown(app.win, app.$('timerBar')), 'the timer to start itself');
+    equal(app.$('timerClock').textContent, '30:00');
+    equal(app.$('timerLabel').textContent, 'Books');
+    equal(app.$('timerOffer').hidden, true, 'no need to offer what already started');
+    assert(stored().timer, 'the timer must be saved, so a reload does not lose it');
+  });
+
+  test('the toast does not sit on top of the timer controls', async () => {
+    // Regression: both are pinned to the bottom, and the toast covered +5/Pause.
+    const books = listOf('once', 'Books', ['Piranesi'], { keepDone: true });
+    books.timerMinutes = 30;
+    const app = await boot(stateOf([books]));
+    app.$('pickBtn').click();
+    await settled(app);
+    app.$('doBtn').click();
+    await waitFor(() => shown(app.win, app.$('timerBar')), 'the timer bar');
+
+    const toast = app.$('toast').getBoundingClientRect();
+    const controls = app.doc.querySelector('.timer-controls').getBoundingClientRect();
+    const overlaps = !(toast.bottom <= controls.top || toast.top >= controls.bottom
+      || toast.right <= controls.left || toast.left >= controls.right);
+    equal(overlaps, false, 'the toast is covering the timer buttons');
+  });
+
+  test('a list without one offers presets instead, and one tap starts it', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('pickBtn').click();
+    await settled(app);
+    app.$('doBtn').click();
+    await waitFor(() => shown(app.win, app.$('timerOffer')), 'the presets');
+
+    const presets = [...app.doc.querySelectorAll('#timerPresets button')].map((b) => b.textContent);
+    equal(presets.join(','), '15 min,30 min,45 min,1 hour');
+    equal(shown(app.win, app.$('timerBar')), false, 'still nothing running');
+
+    app.doc.querySelectorAll('#timerPresets button')[0].click();
+    await waitFor(() => shown(app.win, app.$('timerBar')), 'the timer to start');
+    equal(app.$('timerClock').textContent, '15:00');
+    equal(app.$('timerLabel').textContent, 'Chores');
+  });
+
+  test('a running timer survives a reload and keeps the right time', async () => {
+    const state = stateOf([listOf('once', 'Chores', ['Wash up'])]);
+    state.timer = { duration: 600000, endsAt: Date.now() + 125000, label: 'Chores', pausedAt: 0 };
+    const app = await boot(state);
+    equal(shown(app.win, app.$('timerBar')), true);
+    // Two minutes and a few seconds left, however long the page took to load.
+    assert(/^2:0\d$/.test(app.$('timerClock').textContent), 'got ' + app.$('timerClock').textContent);
+  });
+
+  test('a finished timer says so instead of counting into the past', async () => {
+    const state = stateOf([listOf('once', 'Chores', ['Wash up'])]);
+    state.timer = { duration: 600000, endsAt: Date.now() - 5000, label: 'Wash up', pausedAt: 0 };
+    const app = await boot(state);
+    equal(app.$('timerClock').textContent, '0:00', 'never negative');
+    equal(app.$('timerLabel').textContent, 'Wash up — time is up');
+    equal(app.$('timerBar').classList.contains('finished'), true);
+    equal(shown(app.win, app.$('timerPause')), false, 'nothing left to pause');
+  });
+
+  test('pause holds the clock, and stop clears the timer entirely', async () => {
+    const state = stateOf([listOf('once', 'Chores', ['Wash up'])]);
+    state.timer = { duration: 600000, endsAt: Date.now() + 300000, label: 'Chores', pausedAt: 0 };
+    const app = await boot(state);
+    app.$('timerPause').click();
+    const held = app.$('timerClock').textContent;
+    equal(app.$('timerPause').textContent, 'Resume');
+    equal(app.$('timerLabel').textContent, 'Chores · paused');
+    await sleep(1200);
+    equal(app.$('timerClock').textContent, held, 'a paused clock must not move');
+
+    app.$('timerStop').click();
+    await waitFor(() => !shown(app.win, app.$('timerBar')), 'the bar to go');
+    equal(stored().timer, null, 'and the timer must be cleared from storage');
+  });
+
+  test('accessibility settings apply immediately and survive a reload', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    const rootFont = () => parseFloat(app.win.getComputedStyle(app.doc.documentElement).fontSize);
+    const base = rootFont();
+
+    app.$('dataBtn').click();
+    const scale = app.doc.querySelector('input[name="textScale"][value="larger"]');
+    scale.checked = true;
+    scale.dispatchEvent(new app.win.Event('change', { bubbles: true }));
+    assert(rootFont() > base, 'text must actually grow, not just record a preference');
+
+    app.$('contrastToggle').checked = true;
+    app.$('contrastToggle').dispatchEvent(new app.win.Event('change', { bubbles: true }));
+    equal(app.doc.documentElement.dataset.contrast, 'high');
+
+    await waitFor(() => stored().settings.textScale === 'larger', 'the setting to save');
+    const again = await boot(stored());
+    equal(again.doc.documentElement.dataset.contrast, 'high', 'reapplied on load');
+    assert(parseFloat(again.win.getComputedStyle(again.doc.documentElement).fontSize) > base);
+  });
+
+  test('turning animation off makes a pick land instantly', async () => {
+    const state = stateOf([listOf('once', 'Chores', ['Wash up', 'Bins out'])]);
+    state.settings = { textScale: 'normal', contrast: 'normal', motion: 'reduced', speak: false };
+    const app = await boot(state);
+    app.$('pickBtn').click();
+    // No riffle: the text is final on the very next frame.
+    await sleep(60);
+    assert(['Wash up', 'Bins out'].includes(app.$('cardWhat').textContent),
+      'expected a settled pick, got ' + app.$('cardWhat').textContent);
+  });
+
+  test('leaving a list goes back a screen rather than out of the app', async () => {
+    // Android's back gesture is history.back(); without an entry it would exit.
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+
+    app.win.history.back();
+    await waitFor(() => !shown(app.win, app.$('screenList')), 'the detail to close');
+    equal(shown(app.win, app.$('screenLists')), true, 'and to land on the lists, still inside the app');
+  });
+
+  test('the add field sits within thumb reach, not at the top of the screen', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up', 'Bins out'])]));
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    const box = app.$('addForm').getBoundingClientRect();
+    assert(box.top > app.win.innerHeight * 0.6,
+      'the add field is at ' + Math.round(box.top) + ' of ' + app.win.innerHeight + ', too high to reach one-handed');
   });
 
   test('an ongoing list offers neither display choice', async () => {

@@ -33,6 +33,22 @@ var UnstuckLogic = (() => {
   const HISTORY_LIMIT = 40;
   const MAX_RECENT_AVOIDED = 5;
 
+  const TIMER_PRESETS = [15, 30, 45, 60];
+  const MAX_TIMER_MINUTES = 24 * 60;
+
+  const TEXT_SCALES = { normal: 1, large: 1.15, larger: 1.3 };
+  const DEFAULT_SETTINGS = { textScale: 'normal', contrast: 'normal', motion: 'auto', speak: false };
+
+  function normalizeSettings(raw) {
+    const s = raw && typeof raw === 'object' ? raw : {};
+    return {
+      textScale: Object.prototype.hasOwnProperty.call(TEXT_SCALES, s.textScale) ? s.textScale : 'normal',
+      contrast: s.contrast === 'high' ? 'high' : 'normal',
+      motion: s.motion === 'reduced' || s.motion === 'full' ? s.motion : 'auto',
+      speak: Boolean(s.speak),
+    };
+  }
+
   function uid() {
     const c = typeof globalThis !== 'undefined' ? globalThis.crypto : null;
     if (c && typeof c.randomUUID === 'function') return c.randomUUID();
@@ -40,7 +56,7 @@ var UnstuckLogic = (() => {
   }
 
   function emptyState() {
-    return { schema: SCHEMA, lists: [], selection: [], history: [] };
+    return { schema: SCHEMA, lists: [], selection: [], history: [], settings: normalizeSettings(), timer: null };
   }
 
   function newItem(text) {
@@ -56,8 +72,16 @@ var UnstuckLogic = (() => {
       color,
       keepDone: Boolean(o.keepDone),
       showProgress: Boolean(o.showProgress),
+      timerMinutes: normalizeTimerMinutes(o.timerMinutes),
       items: [],
     };
+  }
+
+  /** A list's standing timer length, or 0 for "this list does not get timed". */
+  function normalizeTimerMinutes(value) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.min(n, MAX_TIMER_MINUTES);
   }
 
   /**
@@ -197,6 +221,7 @@ var UnstuckLogic = (() => {
         name: String(l.name || 'Untitled list'),
         ...resolveKind(l.kind, l.keepDone, l.showProgress),
         color: normalizeColor(l.color) || COLORS[0],
+        timerMinutes: normalizeTimerMinutes(l.timerMinutes),
         items: Array.isArray(l.items)
           ? l.items
               .filter((it) => it && typeof it === 'object')
@@ -220,7 +245,88 @@ var UnstuckLogic = (() => {
       history: Array.isArray(data.history)
         ? data.history.filter((h) => typeof h === 'string').slice(-HISTORY_LIMIT)
         : [],
+      settings: normalizeSettings(data.settings),
+      timer: normalizeTimer(data.timer),
     };
+  }
+
+  // -------------------------------------------------------------- the timer
+
+  /**
+   * A timer is stored as the moment it ends, not as a countdown, so it stays
+   * right across a reload or a phone that suspended the tab. `pausedAt` freezes
+   * it: while set, the remaining time is measured to that instant instead of now.
+   */
+  function startTimer(minutes, label, now) {
+    const mins = normalizeTimerMinutes(minutes);
+    if (!mins) return null;
+    const at = now === undefined ? Date.now() : now;
+    const duration = mins * 60000;
+    return { duration, endsAt: at + duration, label: String(label == null ? '' : label), pausedAt: 0 };
+  }
+
+  function timerRemaining(timer, now) {
+    if (!timer) return 0;
+    const at = timer.pausedAt ? timer.pausedAt : (now === undefined ? Date.now() : now);
+    return Math.max(0, timer.endsAt - at);
+  }
+
+  const timerFinished = (timer, now) => Boolean(timer) && timerRemaining(timer, now) === 0;
+
+  function pauseTimer(timer, now) {
+    if (!timer || timer.pausedAt) return timer;
+    return { ...timer, pausedAt: now === undefined ? Date.now() : now };
+  }
+
+  function resumeTimer(timer, now) {
+    if (!timer || !timer.pausedAt) return timer;
+    const at = now === undefined ? Date.now() : now;
+    return { ...timer, endsAt: at + (timer.endsAt - timer.pausedAt), pausedAt: 0 };
+  }
+
+  /** Adds time, restarting from now if the timer has already run out. */
+  function extendTimer(timer, minutes, now) {
+    if (!timer) return timer;
+    const at = now === undefined ? Date.now() : now;
+    const ms = normalizeTimerMinutes(minutes) * 60000;
+    if (!ms) return timer;
+    if (timer.pausedAt) return { ...timer, duration: timer.duration + ms, endsAt: timer.endsAt + ms };
+    const base = Math.max(timer.endsAt, at);
+    return { ...timer, duration: timer.duration + ms, endsAt: base + ms };
+  }
+
+  function normalizeTimer(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const duration = Number(raw.duration);
+    const endsAt = Number(raw.endsAt);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(endsAt)) return null;
+    const pausedAt = Number(raw.pausedAt);
+    return {
+      duration,
+      endsAt,
+      label: String(raw.label == null ? '' : raw.label),
+      pausedAt: Number.isFinite(pausedAt) && pausedAt > 0 ? pausedAt : 0,
+    };
+  }
+
+  /** mm:ss, growing to h:mm:ss only once there is an hour to show. */
+  function formatClock(ms) {
+    const total = Math.ceil(Math.max(0, ms) / 1000);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return hours > 0 ? hours + ':' + pad(minutes) + ':' + pad(seconds) : minutes + ':' + pad(seconds);
+  }
+
+  /** How a timer length reads in a menu or on a list. */
+  function formatMinutes(minutes) {
+    if (!minutes) return 'Off';
+    if (minutes < 60) return minutes + ' min';
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    const hourPart = plural(hours, 'hour', 'hours');
+    return rest ? hourPart + ' ' + rest + ' min' : hourPart;
   }
 
   // -------------------------------------------------------- completing things
@@ -374,6 +480,9 @@ var UnstuckLogic = (() => {
     SCHEMA, STORE_KEY, COLORS, KIND_LABEL, HISTORY_LIMIT, STARTER_LISTS,
     uid, emptyState, newItem, newList, listFromStarter, migrate, resolveKind,
     normalizeHex, normalizeColor, isCustomColor, hsvToHex, hexToHsv,
+    TIMER_PRESETS, TEXT_SCALES, DEFAULT_SETTINGS, normalizeSettings, normalizeTimerMinutes,
+    startTimer, timerRemaining, timerFinished, pauseTimer, resumeTimer, extendTimer,
+    normalizeTimer, formatClock, formatMinutes,
     setDone, logSession,
     listById, isPickable, pickableCount, activeLists, pool,
     recentDepth, chooseFrom, pushHistory,

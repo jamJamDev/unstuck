@@ -48,12 +48,18 @@
    the hidden attribute's UA default. Toggling `hidden` must always win. */
 [hidden] { display: none !important; }
 
+html {
+  /* Every font-size below is in rem, so this one line scales the whole app. */
+  font-size: calc(16px * var(--text-scale, 1));
+}
+
 html, body {
   margin: 0;
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   overscroll-behavior-y: none;
 }
@@ -108,7 +114,7 @@ button { cursor: pointer; }
 .topbar h1 {
   flex: 1;
   margin: 0;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 650;
   letter-spacing: 0.2px;
 }
@@ -122,7 +128,7 @@ button { cursor: pointer; }
   border: 1px solid transparent;
   border-radius: 12px;
   color: var(--muted);
-  font-size: 20px;
+  font-size: 1.25rem;
 }
 .icon-btn:hover { background: var(--surface); color: var(--text); }
 
@@ -136,7 +142,7 @@ button { cursor: pointer; }
   border: 0;
   border-radius: 12px;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 .back-btn:hover { background: var(--surface); color: var(--text); }
 
@@ -173,11 +179,11 @@ main {
   background: none;
   border: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.3px;
 }
-.tab .glyph { font-size: 19px; line-height: 1; }
+.tab .glyph { font-size: 1.1875rem; line-height: 1; }
 .tab[aria-selected="true"] { color: var(--accent); }
 
 /* ---------- Decide screen ---------- */
@@ -199,7 +205,7 @@ main {
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 550;
 }
 .chip .dot {
@@ -231,14 +237,14 @@ main {
   border-radius: 50%;
   background: radial-gradient(circle at 50% 35%, #ffc06a, var(--accent) 62%, #d9791f);
   color: var(--accent-ink);
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 750;
   letter-spacing: 0.2px;
   line-height: 1.25;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset, 0 18px 50px -18px rgba(244,161,60,0.65);
   transition: transform 140ms ease, box-shadow 140ms ease;
 }
-.pick-btn span { display: block; font-size: 15px; font-weight: 600; opacity: 0.72; }
+.pick-btn span { display: block; font-size: 0.9375rem; font-weight: 600; opacity: 0.72; }
 .pick-btn:hover { transform: scale(1.02); }
 .pick-btn:active { transform: scale(0.97); }
 .pick-btn[disabled] {
@@ -272,7 +278,7 @@ main {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -282,7 +288,7 @@ main {
 
 .card .what {
   margin: 12px 0 4px;
-  font-size: 27px;
+  font-size: 1.6875rem;
   line-height: 1.25;
   font-weight: 680;
   overflow-wrap: anywhere;
@@ -290,7 +296,7 @@ main {
 
 .card .meta {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   min-height: 21px;
 }
 
@@ -307,7 +313,7 @@ main {
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 620;
   padding: 0 14px;
 }
@@ -326,7 +332,7 @@ main {
   margin: 14px 0 0;
   text-align: center;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 /* Swipe affordance overlays, revealed as the card is dragged. */
@@ -336,7 +342,7 @@ main {
   padding: 4px 10px;
   border-radius: 8px;
   border: 2px solid currentColor;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 800;
   letter-spacing: 1px;
   opacity: 0;
@@ -351,7 +357,7 @@ main {
   margin: 0;
   text-align: center;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   min-height: 20px;
 }
 
@@ -360,7 +366,7 @@ main {
   text-align: center;
   max-width: 380px;
 }
-.empty h3 { margin: 0 0 8px; font-size: 20px; }
+.empty h3 { margin: 0 0 8px; font-size: 1.25rem; }
 .empty p { margin: 0 0 18px; color: var(--muted); }
 .empty .actions { display: flex; flex-direction: column; gap: 10px; }
 .empty .btn { flex: none; }
@@ -374,8 +380,8 @@ main {
   gap: 10px;
   margin: 4px 0 12px;
 }
-.section-head h2 { margin: 0; font-size: 17px; font-weight: 650; }
-.section-head .sub { color: var(--muted); font-size: 13px; }
+.section-head h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; }
+.section-head .sub { color: var(--muted); font-size: 0.8125rem; }
 
 .list-grid { display: flex; flex-direction: column; gap: 10px; }
 
@@ -395,18 +401,18 @@ main {
 .list-card:hover { border-color: #3c4553; border-left-color: var(--list-color, var(--accent)); }
 .list-card .body { flex: 1; min-width: 0; }
 .list-card .name {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 640;
   display: flex;
   align-items: center;
   gap: 8px;
   overflow-wrap: anywhere;
 }
-.list-card .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
-.list-card .chev { color: var(--muted); font-size: 20px; flex: none; }
+.list-card .sub { color: var(--muted); font-size: 0.8125rem; margin-top: 2px; }
+.list-card .chev { color: var(--muted); font-size: 1.25rem; flex: none; }
 
 .badge {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -433,13 +439,13 @@ main {
   gap: 10px;
   margin-top: 6px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .progress-meta button {
   background: none;
   border: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   text-decoration: underline;
   min-height: 32px;
   padding: 0 4px;
@@ -459,14 +465,24 @@ main {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 23px;
+  font-size: 1.4375rem;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
 .detail-head .title .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--list-color); flex: none; }
-.detail-head .kind { color: var(--muted); font-size: 14px; margin-top: 6px; }
+.detail-head .kind { color: var(--muted); font-size: 0.875rem; margin-top: 6px; }
 
-.add-row { display: flex; gap: 8px; margin-bottom: 16px; }
+/* Pinned to the bottom of the screen: the most-used control on this list, kept
+   where a thumb can actually reach it. */
+.add-row {
+  display: flex;
+  gap: 8px;
+  position: sticky;
+  bottom: 0;
+  margin: 16px -4px 0;
+  padding: 10px 4px calc(env(safe-area-inset-bottom, 0px) + 6px);
+  background: linear-gradient(to top, var(--bg) 72%, transparent);
+}
 .add-row input {
   flex: 1;
   min-width: 0;
@@ -502,7 +518,7 @@ main {
   border: 2px solid #48525f;
   background: none;
   color: var(--accent-ink);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 900;
   line-height: 1;
   padding: 0;
@@ -522,7 +538,7 @@ main {
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   padding: 0 6px;
@@ -548,7 +564,7 @@ main {
   padding: 5px 8px;
 }
 
-.item .when { color: var(--muted); font-size: 12px; flex: none; }
+.item .when { color: var(--muted); font-size: 0.75rem; flex: none; }
 
 .item .kill {
   min-width: 32px; min-height: 32px;
@@ -557,7 +573,7 @@ main {
   border: 0;
   border-radius: 9px;
   color: #6d7688;
-  font-size: 17px;
+  font-size: 1.0625rem;
   line-height: 1;
 }
 .item .kill:hover { color: var(--bad); background: var(--surface-2); }
@@ -569,7 +585,7 @@ main {
   gap: 10px;
   margin: 22px 0 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 650;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -578,7 +594,7 @@ main {
   background: none;
   border: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   text-decoration: underline;
   min-height: 32px;
   padding: 0 4px;
@@ -589,7 +605,7 @@ main {
 
 .hint-empty {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   text-align: center;
   padding: 26px 10px;
   border: 1px dashed var(--line);
@@ -609,16 +625,28 @@ dialog {
   color: var(--text);
 }
 dialog::backdrop { background: rgba(6,8,12,0.66); }
+
+@media (max-width: 560px) {
+  /* Bottom sheet on a phone: the controls land under the thumb, not mid-screen. */
+  dialog:modal {
+    margin: auto auto 0;
+    width: 100vw;
+    max-width: none;
+    border-radius: 20px 20px 0 0;
+    border-bottom: 0;
+  }
+  dialog .dlg-body { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); }
+}
 dialog .dlg-body {
   padding: 20px;
   /* Tall dialogs scroll inside themselves rather than off a short screen. */
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
 }
-dialog h2 { margin: 0 0 4px; font-size: 19px; }
-dialog .dlg-sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
-dialog label.field { display: block; margin-bottom: 16px; }
-dialog label.field > span { display: block; font-size: 13px; font-weight: 620; color: var(--muted); margin-bottom: 6px; }
+dialog h2 { margin: 0 0 4px; font-size: 1.1875rem; }
+dialog .dlg-sub { margin: 0 0 18px; color: var(--muted); font-size: 0.875rem; }
+dialog .field { display: block; margin-bottom: 14px; }
+dialog .field > span:first-child { display: block; font-size: 0.8125rem; font-weight: 620; color: var(--muted); margin-bottom: 6px; }
 dialog input[type="text"] {
   width: 100%;
   min-height: var(--tap);
@@ -653,8 +681,8 @@ dialog .dlg-actions {
   cursor: pointer;
 }
 .kind-opt input { margin: 3px 0 0; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
-.kind-opt strong { display: block; font-size: 15px; }
-.kind-opt small { color: var(--muted); font-size: 13px; }
+.kind-opt strong { display: block; font-size: 0.9375rem; }
+.kind-opt small { color: var(--muted); font-size: 0.8125rem; }
 .kind-opt:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
 .kind-opt:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
 
@@ -664,7 +692,7 @@ dialog .dlg-actions {
   border-radius: 10px;
   background: var(--surface-2);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -697,15 +725,15 @@ dialog .dlg-actions {
   place-items: center;
   border-radius: 7px;
   border: 2px solid #48525f;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 900;
   color: var(--accent-ink);
 }
 .starter[aria-pressed="true"] { border-color: var(--list-color); background: color-mix(in srgb, var(--list-color) 13%, var(--surface-2)); }
 .starter[aria-pressed="true"] .tick { background: var(--list-color); border-color: var(--list-color); }
 .starter .body { flex: 1; min-width: 0; }
-.starter .name { font-size: 15px; font-weight: 620; display: flex; align-items: center; gap: 8px; }
-.starter .sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+.starter .name { font-size: 0.9375rem; font-weight: 620; display: flex; align-items: center; gap: 8px; }
+.starter .sub { color: var(--muted); font-size: 0.7812rem; margin-top: 1px; }
 
 /* Compact two-way choice: the full option cards make the dialog scroll, which
    hides whatever sits below the sticky action bar. */
@@ -725,7 +753,7 @@ dialog .dlg-actions {
   justify-content: center;
   text-align: center;
   border-radius: 9px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--muted);
   cursor: pointer;
@@ -741,10 +769,150 @@ dialog .dlg-actions {
 .segmented label:has(input:checked) { background: var(--accent); color: var(--accent-ink); }
 .segmented label:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
 
-.seg-note { margin: 7px 2px 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.seg-note { margin: 7px 2px 0; color: var(--muted); font-size: 0.8125rem; line-height: 1.45; }
 
-/* The two display choices are their own question; give them room to read as one. */
-#keepField, #progressField { margin-top: 26px; }
+/* The two display choices are their own question; the extra room above each
+   separates them from the one before rather than reading as one long list. */
+#keepField, #progressField { margin-top: 16px; }
+
+/* ---------- Accessibility modes ---------- */
+
+/* Secondary text and borders are the parts that fall short on a dark screen. */
+:root[data-contrast="high"] {
+  --muted: #ccd4e2;
+  --line: #4a5464;
+  --surface: #1d222b;
+  --surface-2: #2a313d;
+}
+:root[data-contrast="high"] .seg-note,
+:root[data-contrast="high"] .pool-note,
+:root[data-contrast="high"] .card .meta { color: #d5dce8; }
+
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+dialog select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: inherit;
+}
+dialog select:focus { border-color: var(--accent); outline: none; }
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.switch-row > span { flex: 1; min-width: 0; }
+.switch-row strong { display: block; font-size: 0.9375rem; }
+.switch-row small { color: var(--muted); font-size: 0.8125rem; }
+.switch-row input[type="checkbox"] {
+  width: 22px; height: 22px;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+/* ---------- Timer ---------- */
+
+.link-btn {
+  display: block;
+  margin: 6px auto 0;
+  min-height: var(--tap);
+  padding: 0 12px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  text-decoration: underline;
+}
+.link-btn:hover { color: var(--text); }
+
+/* Sits directly above the tab bar: visible on every screen, and in thumb reach. */
+.timer-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px calc(var(--safe-right) + 14px) 10px calc(var(--safe-left) + 14px);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+}
+.timer-bar.finished {
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  border-top-color: var(--accent);
+}
+
+.timer-face { flex: 1; min-width: 0; }
+.timer-clock {
+  display: block;
+  font-size: 1.375rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.timer-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timer-bar.finished .timer-label { color: var(--text); }
+
+.timer-controls { display: flex; gap: 6px; flex: none; }
+.timer-btn {
+  min-height: var(--tap);
+  min-width: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 620;
+}
+.timer-btn:hover { border-color: #3c4553; }
+
+.timer-offer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.timer-offer > span { color: var(--muted); font-size: 0.875rem; }
+.timer-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.timer-presets button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.timer-presets button:hover { border-color: var(--accent); color: var(--accent); }
 
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 
@@ -752,7 +920,7 @@ dialog .dlg-actions {
   background: var(--surface-2);
   border: 1px dashed #5a6472;
   color: var(--muted);
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 500;
   line-height: 1;
   display: grid;
@@ -815,7 +983,7 @@ dialog .dlg-actions {
   width: 100%;
 }
 .wheel-row > span:first-child {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--muted);
   flex: none;
@@ -872,13 +1040,15 @@ dialog .dlg-actions {
   border: 1px solid #3c4553;
   border-radius: 12px;
   box-shadow: 0 12px 30px -12px rgba(0,0,0,0.8);
-  font-size: 14px;
+  font-size: 0.875rem;
   opacity: 0;
   pointer-events: none;
   transition: opacity 180ms ease, transform 180ms ease;
   z-index: 40;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+/* A running timer adds a bar above the tab bar; the toast must clear its buttons. */
+:root[data-timer="on"] #toast { bottom: calc(var(--safe-bottom) + 142px); }
 #toast button {
   background: none;
   border: 0;
@@ -893,7 +1063,7 @@ dialog .dlg-actions {
   background: #46201f;
   border-bottom: 1px solid #7a3330;
   color: #ffd8d6;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 #banner[hidden] { display: none; }
 
@@ -954,11 +1124,16 @@ dialog .dlg-actions {
             <button id="skipBtn" class="btn">Skip</button>
             <button id="doBtn" class="btn primary">I'm doing it</button>
           </div>
+          <div id="timerOffer" class="timer-offer" hidden>
+            <span>Time it?</span>
+            <div id="timerPresets" class="timer-presets"></div>
+          </div>
           <p id="swipeHint" class="swipe-hint"></p>
         </div>
       </div>
 
       <p id="poolNote" class="pool-note"></p>
+      <button type="button" id="standaloneTimer" class="link-btn">Set a timer</button>
       <p id="announcer" class="sr-only" role="status" aria-live="polite"></p>
     </section>
 
@@ -990,11 +1165,6 @@ dialog .dlg-actions {
         </div>
       </div>
 
-      <form id="addForm" class="add-row">
-        <input id="addInput" type="text" placeholder="Add something" aria-label="New item" autocomplete="off" maxlength="200">
-        <button class="btn primary" type="submit">Add</button>
-      </form>
-
       <ul id="openItems" class="items"></ul>
       <p id="detailEmpty" class="hint-empty" hidden></p>
 
@@ -1010,8 +1180,25 @@ dialog .dlg-actions {
         <button id="editListBtn" class="btn">Edit list</button>
         <button id="deleteListBtn" class="btn danger">Delete list</button>
       </div>
+
+      <form id="addForm" class="add-row">
+        <input id="addInput" type="text" placeholder="Add something" aria-label="New item" autocomplete="off" maxlength="200">
+        <button class="btn primary" type="submit">Add</button>
+      </form>
     </section>
   </main>
+
+  <div id="timerBar" class="timer-bar" role="status" aria-live="off" hidden>
+    <div class="timer-face">
+      <span id="timerClock" class="timer-clock">0:00</span>
+      <span id="timerLabel" class="timer-label"></span>
+    </div>
+    <div class="timer-controls">
+      <button type="button" id="timerAdd" class="timer-btn">+5</button>
+      <button type="button" id="timerPause" class="timer-btn">Pause</button>
+      <button type="button" id="timerStop" class="timer-btn" aria-label="Stop the timer">✕</button>
+    </div>
+  </div>
 
   <nav class="tabbar" role="tablist" aria-label="Sections">
     <button class="tab" role="tab" id="tabDecide" aria-selected="true" aria-controls="screenDecide">
@@ -1040,16 +1227,11 @@ dialog .dlg-actions {
 
     <div class="field" id="kindField">
       <span>How does finishing work?</span>
-      <div class="kind-picker" role="radiogroup" aria-label="Kind of list">
-        <label class="kind-opt">
-          <input type="radio" name="kind" value="once" checked>
-          <span><strong>Tick off</strong><small>Finishing it takes it out of the hat.</small></span>
-        </label>
-        <label class="kind-opt">
-          <input type="radio" name="kind" value="endless">
-          <span><strong>Ongoing</strong><small>Never finished, just done again.</small></span>
-        </label>
+      <div class="segmented" role="radiogroup" aria-label="Kind of list">
+        <label><input type="radio" name="kind" value="once" checked><span>Tick off</span></label>
+        <label><input type="radio" name="kind" value="endless"><span>Ongoing</span></label>
       </div>
+      <p class="seg-note" id="kindDesc"></p>
       <p class="field-note" id="kindNote" hidden></p>
     </div>
 
@@ -1069,6 +1251,23 @@ dialog .dlg-actions {
         <label><input type="radio" name="summary" value="progress"><span>Progress bar</span></label>
       </div>
       <p class="seg-note" id="summaryNote"></p>
+    </div>
+
+    <div class="field">
+      <span>Timer</span>
+      <select id="listTimer">
+        <option value="0">No timer</option>
+        <option value="5">5 min</option>
+        <option value="10">10 min</option>
+        <option value="15">15 min</option>
+        <option value="20">20 min</option>
+        <option value="25">25 min</option>
+        <option value="30">30 min</option>
+        <option value="45">45 min</option>
+        <option value="60">1 hour</option>
+        <option value="90">1 hour 30 min</option>
+      </select>
+      <p class="seg-note" id="listTimerNote"></p>
     </div>
 
     <div class="field">
@@ -1114,9 +1313,45 @@ dialog .dlg-actions {
 
 <dialog id="dataDialog" aria-labelledby="dataDialogTitle">
   <div class="dlg-body">
-    <h2 id="dataDialogTitle">Backup &amp; data</h2>
+    <h2 id="dataDialogTitle">Settings</h2>
     <p class="dlg-sub">Everything lives on this device only. Nothing is ever uploaded.</p>
-    <div class="dlg-actions" style="flex-direction: column; margin-top: 4px;">
+
+    <div class="field">
+      <span>Text size</span>
+      <div class="segmented" role="radiogroup" aria-label="Text size">
+        <label><input type="radio" name="textScale" value="normal" checked><span>Normal</span></label>
+        <label><input type="radio" name="textScale" value="large"><span>Large</span></label>
+        <label><input type="radio" name="textScale" value="larger"><span>Larger</span></label>
+      </div>
+    </div>
+
+    <div class="field">
+      <span>Animation</span>
+      <div class="segmented" role="radiogroup" aria-label="Animation">
+        <label><input type="radio" name="motion" value="auto" checked><span>Match phone</span></label>
+        <label><input type="radio" name="motion" value="full"><span>On</span></label>
+        <label><input type="radio" name="motion" value="reduced"><span>Off</span></label>
+      </div>
+      <p class="seg-note">"Match phone" follows your device's reduce-motion setting.</p>
+    </div>
+
+    <label class="switch-row">
+      <span>
+        <strong>Read the pick aloud</strong>
+        <small>Speaks what it picked, so you can hear it without looking.</small>
+      </span>
+      <input type="checkbox" id="speakToggle">
+    </label>
+
+    <label class="switch-row">
+      <span>
+        <strong>Higher contrast</strong>
+        <small>Brightens the secondary text and strengthens borders.</small>
+      </span>
+      <input type="checkbox" id="contrastToggle">
+    </label>
+
+    <div class="dlg-actions" style="flex-direction: column; margin-top: 18px;">
       <button class="btn" id="exportBtn">Export a backup file</button>
       <button class="btn" id="importBtn">Restore from a backup</button>
       <button class="btn danger" id="resetBtn">Erase everything</button>
@@ -1182,6 +1417,30 @@ dialog .dlg-actions {
       el.className = baseClass + ' c-' + safe;
       el.style.removeProperty('--list-color');
     }
+  }
+
+  // ------------------------------------------------------------- settings
+
+  /** Pushes the accessibility settings onto the document root, where CSS reads them. */
+  function applySettings() {
+    const s = state.settings;
+    const root = document.documentElement;
+    root.style.setProperty('--text-scale', String(L.TEXT_SCALES[s.textScale] || 1));
+    root.dataset.contrast = s.contrast;
+    root.dataset.motion = s.motion;
+  }
+
+  /** True when animation should be skipped, by the phone's preference or ours. */
+  function motionOff() {
+    if (state.settings.motion === 'reduced') return true;
+    if (state.settings.motion === 'full') return false;
+    return reducedMotion.matches;
+  }
+
+  function speakPick(text) {
+    if (!state.settings.speak || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
   }
 
   const listById = (id) => L.listById(state, id);
@@ -1276,6 +1535,7 @@ dialog .dlg-actions {
   // ------------------------------------------------------------ navigation
 
   function setTab(tab) {
+    if (tab === 'decide' && ui.openListId) closeListDetail();
     ui.tab = tab;
     if (tab === 'decide') ui.openListId = null;
     renderAll();
@@ -1286,13 +1546,27 @@ dialog .dlg-actions {
   function openList(id) {
     ui.openListId = id;
     ui.tab = 'lists';
+    // A history entry so Android's back gesture leaves the list rather than the
+    // app. Chrome already closes dialogs on back, so only this layer needs it.
+    history.pushState({ unstuckList: id }, '');
     renderAll();
     document.querySelector('main').scrollTop = 0;
   }
 
+  /** Always leave a list through history, so both back routes behave the same. */
+  function closeListDetail() {
+    if (ui.openListId) history.back();
+  }
+
+  window.addEventListener('popstate', () => {
+    if (!ui.openListId) return;
+    ui.openListId = null;
+    renderAll();
+  });
+
   $('tabDecide').addEventListener('click', () => setTab('decide'));
   $('tabLists').addEventListener('click', () => setTab('lists'));
-  $('backBtn').addEventListener('click', () => { ui.openListId = null; renderAll(); });
+  $('backBtn').addEventListener('click', closeListDetail);
 
   // ------------------------------------------------------------- rendering
 
@@ -1692,6 +1966,7 @@ dialog .dlg-actions {
     state.lists.splice(at, 1);
     if (selectedAt !== -1) state.selection.splice(selectedAt, 1);
     if (session.current && session.current.list.id === list.id) closeCard();
+    closeListDetail();
     ui.openListId = null;
     save();
     renderAll();
@@ -1945,6 +2220,8 @@ dialog .dlg-actions {
     if (keep) keep.checked = true;
     const summary = document.querySelector('input[name="summary"][value="' + (list && list.showProgress ? 'progress' : 'left') + '"]');
     if (summary) summary.checked = true;
+    $('listTimer').value = String(list ? list.timerMinutes : 0);
+    syncListTimerNote();
     syncKeepField();
     // The picker starts closed each time; a custom colour is already in the row.
     $('customColor').hidden = true;
@@ -1961,6 +2238,12 @@ dialog .dlg-actions {
     $('keepField').hidden = !ticks;
     $('progressField').hidden = !ticks;
 
+    // The segmented buttons are short by design, so spell out what each means.
+    // This one describes both kinds, so it is set before the early return below.
+    $('kindDesc').textContent = ticks
+      ? 'Finishing something takes it out of the hat. Chores, books, errands.'
+      : 'Never finished, just done again — each pick logs a session.';
+
     // The reassurance about switching only earns its space while switching.
     const editing = ui.editingListId ? listById(ui.editingListId) : null;
     const switching = Boolean(editing) && Boolean(kind) && kind.value !== editing.kind;
@@ -1970,7 +2253,6 @@ dialog .dlg-actions {
 
     if (!ticks) return;
 
-    // The segmented buttons are short by design, so spell out what each means.
     const keep = document.querySelector('input[name="keep"]:checked');
     $('keepNote').textContent = keep && keep.value === 'record'
       ? 'They stay listed, struck through, as a record.'
@@ -1985,6 +2267,15 @@ dialog .dlg-actions {
   for (const radio of document.querySelectorAll('input[name="kind"], input[name="keep"], input[name="summary"]')) {
     radio.addEventListener('change', syncKeepField);
   }
+
+  function syncListTimerNote() {
+    const minutes = L.normalizeTimerMinutes($('listTimer').value);
+    $('listTimerNote').textContent = minutes
+      ? 'Starts automatically when you accept a pick.'
+      : 'Not timed. You can still start one by hand.';
+  }
+
+  $('listTimer').addEventListener('change', syncListTimerNote);
 
   $('newListBtn').addEventListener('click', () => openListDialog(null));
   $('editListBtn').addEventListener('click', () => {
@@ -2003,18 +2294,21 @@ dialog .dlg-actions {
     const kind = kindInput ? kindInput.value : 'once';
     const keepDone = kind === 'once' && Boolean(keepInput) && keepInput.value === 'record';
     const showProgress = kind === 'once' && Boolean(summaryInput) && summaryInput.value === 'progress';
+    const timerMinutes = L.normalizeTimerMinutes($('listTimer').value);
     const existing = ui.editingListId ? listById(ui.editingListId) : null;
 
     if (existing) {
       const before = {
         name: existing.name, color: existing.color, kind: existing.kind,
         keepDone: existing.keepDone, showProgress: existing.showProgress,
+        timerMinutes: existing.timerMinutes,
       };
       existing.name = name;
       existing.color = ui.draftColor;
       existing.kind = kind;
       existing.keepDone = keepDone;
       existing.showProgress = showProgress;
+      existing.timerMinutes = timerMinutes;
       // A kind change alters the pool, so any card drawn under the old rules is stale.
       if (before.kind !== kind) resetSession();
       save();
@@ -2029,7 +2323,7 @@ dialog .dlg-actions {
       return;
     }
 
-    const list = newList(name, kind, ui.draftColor, { keepDone, showProgress });
+    const list = newList(name, kind, ui.draftColor, { keepDone, showProgress, timerMinutes });
     state.lists.push(list);
     save();
     $('listDialog').close();
@@ -2128,6 +2422,7 @@ dialog .dlg-actions {
   }
 
   function closeCard() {
+    $('timerOffer').hidden = true;
     session.current = null;
     session.settled = false;
     // Retires any riffle still in flight, which would otherwise settle onto a closed card.
@@ -2173,8 +2468,9 @@ dialog .dlg-actions {
     $('doBtn').hidden = false;
     $('doBtn').textContent = 'I’m doing it';
     $('swipeHint').textContent = swipeHintText();
+    $('timerOffer').hidden = true;
 
-    if (reducedMotion.matches) {
+    if (motionOff()) {
       settleOn(item.text);
       return;
     }
@@ -2217,7 +2513,8 @@ dialog .dlg-actions {
     void card.offsetWidth;
     card.classList.add('settling');
     card.focus({ preventScroll: true });
-    $('announcer').textContent = 'Picked: ' + text + ', from ' + session.current.list.name + '.';
+    announce('Picked: ' + text + ', from ' + session.current.list.name + '.');
+    speakPick(text + ', from ' + session.current.list.name);
   }
 
   /** The four fields that together record how often something has been finished. */
@@ -2248,6 +2545,15 @@ dialog .dlg-actions {
 
     save();
     showAccepted(message);
+
+    // A list with a standing timer starts it here: that is the whole point of
+    // setting one, so it costs no taps at all.
+    if (!state.timer && list.timerMinutes) {
+      askForAlarmPermission();
+      startTimerFor(list.timerMinutes, list.name);
+    }
+    renderTimerOffer(list);
+
     toast(message, () => { Object.assign(item, before); closeCard(); });
   }
 
@@ -2289,6 +2595,178 @@ dialog .dlg-actions {
     else if (e.key === 'ArrowRight') { e.preventDefault(); accept(); }
   });
 
+  // ---------------------------------------------------------------- timer
+
+  let timerTick = 0;
+  let ranAlarm = false;
+
+  function startTimerFor(minutes, label) {
+    const timer = L.startTimer(minutes, label);
+    if (!timer) return;
+    state.timer = timer;
+    ranAlarm = false;
+    save();
+    renderTimer();
+    scheduleTimerTick();
+    announce('Timer started: ' + L.formatMinutes(minutes) + (label ? ' for ' + label : ''));
+  }
+
+  function stopTimer() {
+    state.timer = null;
+    ranAlarm = false;
+    clearInterval(timerTick);
+    timerTick = 0;
+    save();
+    renderTimer();
+  }
+
+  function scheduleTimerTick() {
+    clearInterval(timerTick);
+    if (!state.timer) return;
+    // The clock is derived from the end time, so a missed tick cannot make it drift.
+    timerTick = setInterval(renderTimer, 250);
+  }
+
+  function renderTimer() {
+    const bar = $('timerBar');
+    const timer = state.timer;
+    bar.hidden = !timer;
+    document.documentElement.dataset.timer = timer ? 'on' : 'off';
+    $('standaloneTimer').hidden = Boolean(timer);
+    if (!timer) return;
+
+    const remaining = L.timerRemaining(timer);
+    const done = remaining === 0;
+    $('timerClock').textContent = L.formatClock(remaining);
+    $('timerLabel').textContent = done
+      ? (timer.label ? timer.label + ' — time is up' : 'Time is up')
+      : (timer.label || 'Timer') + (timer.pausedAt ? ' · paused' : '');
+    bar.classList.toggle('finished', done);
+    $('timerPause').textContent = timer.pausedAt ? 'Resume' : 'Pause';
+    $('timerPause').hidden = done;
+    $('timerAdd').textContent = done ? '+5 more' : '+5';
+
+    if (done && !ranAlarm) {
+      ranAlarm = true;
+      clearInterval(timerTick);
+      timerTick = 0;
+      soundAlarm(timer.label);
+    }
+  }
+
+  /**
+   * Rings as loudly as the web allows: a tone, a buzz, and a notification if one
+   * was permitted. A phone that suspended the tab will not run this until the app
+   * is looked at again — the end time is stored, so the clock is still right.
+   */
+  function soundAlarm(label) {
+    const message = label ? label + ' — time is up' : 'Time is up';
+    announce(message);
+    speakPick(message);
+
+    if (navigator.vibrate) navigator.vibrate([220, 120, 220, 120, 420]);
+
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) {
+      try {
+        const ctx = new Ctx();
+        const now = ctx.currentTime;
+        [0, 0.45, 0.9].forEach((offset) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.frequency.value = 880;
+          gain.gain.setValueAtTime(0.0001, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.32);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.35);
+        });
+        setTimeout(() => ctx.close(), 2000);
+      } catch (err) {
+        // A blocked audio context must not swallow the rest of the alarm.
+        console.warn('Unstuck: could not play the timer tone', err);
+      }
+    }
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('Unstuck', { body: message, icon: './icons/icon-192.png', tag: 'unstuck-timer' });
+      } catch (err) {
+        console.warn('Unstuck: could not post the timer notification', err);
+      }
+    }
+  }
+
+  /** Asked for once, the first time a timer is started. */
+  function askForAlarmPermission() {
+    if (!('Notification' in window) || Notification.permission !== 'default') return;
+    Notification.requestPermission().catch((err) => {
+      console.warn('Unstuck: notification permission request failed', err);
+    });
+  }
+
+  function announce(message) {
+    $('announcer').textContent = message;
+  }
+
+  function renderTimerOffer(list) {
+    const offer = $('timerOffer');
+    const box = $('timerPresets');
+    // A list with its own timer already started one; nothing to offer.
+    const show = !state.timer && (!list || !list.timerMinutes);
+    offer.hidden = !show;
+    if (!show) return;
+    box.textContent = '';
+    for (const minutes of L.TIMER_PRESETS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = L.formatMinutes(minutes);
+      b.addEventListener('click', () => {
+        askForAlarmPermission();
+        startTimerFor(minutes, list ? list.name : '');
+        renderTimerOffer(list);
+      });
+      box.appendChild(b);
+    }
+  }
+
+  $('timerStop').addEventListener('click', stopTimer);
+
+  $('timerPause').addEventListener('click', () => {
+    if (!state.timer) return;
+    state.timer = state.timer.pausedAt ? L.resumeTimer(state.timer) : L.pauseTimer(state.timer);
+    save();
+    renderTimer();
+    scheduleTimerTick();
+  });
+
+  $('timerAdd').addEventListener('click', () => {
+    if (!state.timer) return;
+    state.timer = L.extendTimer(state.timer, 5);
+    ranAlarm = false;
+    save();
+    renderTimer();
+    scheduleTimerTick();
+  });
+
+  $('standaloneTimer').addEventListener('click', () => {
+    askForAlarmPermission();
+    // No pick to time, so this is the one place a length is worth asking for.
+    const offer = $('timerOffer');
+    renderTimerOffer(null);
+    offer.hidden = false;
+    $('card').hidden = false;
+    $('cardFrom').lastElementChild.textContent = 'Timer';
+    $('cardWhat').textContent = 'How long?';
+    $('cardMeta').textContent = '';
+    $('skipBtn').hidden = true;
+    $('doBtn').hidden = true;
+    $('swipeHint').textContent = '';
+    $('pickBtn').hidden = true;
+    paintColor($('card'), 'card', COLORS[0]);
+  });
+
   // ---------------------------------------------------------------- swipe
 
   const SWIPE_TRIGGER = 92;
@@ -2311,7 +2789,7 @@ dialog .dlg-actions {
 
   function flyOut(dir, after) {
     const card = $('card');
-    if (reducedMotion.matches) { after(); return; }
+    if (motionOff()) { after(); return; }
     card.style.transition = 'transform 200ms ease-in, opacity 200ms ease-in';
     card.style.transform = 'translateX(' + (dir * window.innerWidth) + 'px) rotate(' + (dir * 22) + 'deg)';
     card.style.opacity = '0';
@@ -2372,7 +2850,51 @@ dialog .dlg-actions {
 
   // --------------------------------------------------------- backup & data
 
-  $('dataBtn').addEventListener('click', () => $('dataDialog').showModal());
+  /** Everything that must follow a wholesale state swap: import, reset, and their undos. */
+  function adoptState() {
+    resetSession();
+    applySettings();
+    ranAlarm = false;
+    renderAll();
+    renderTimer();
+    scheduleTimerTick();
+  }
+
+  function syncSettingsControls() {
+    const s = state.settings;
+    const scale = document.querySelector('input[name="textScale"][value="' + s.textScale + '"]');
+    if (scale) scale.checked = true;
+    const motion = document.querySelector('input[name="motion"][value="' + s.motion + '"]');
+    if (motion) motion.checked = true;
+    $('speakToggle').checked = s.speak;
+    $('contrastToggle').checked = s.contrast === 'high';
+  }
+
+  function changeSetting(patch) {
+    state.settings = L.normalizeSettings({ ...state.settings, ...patch });
+    applySettings();
+    save();
+  }
+
+  for (const radio of document.querySelectorAll('input[name="textScale"]')) {
+    radio.addEventListener('change', (e) => changeSetting({ textScale: e.target.value }));
+  }
+  for (const radio of document.querySelectorAll('input[name="motion"]')) {
+    radio.addEventListener('change', (e) => changeSetting({ motion: e.target.value }));
+  }
+  $('contrastToggle').addEventListener('change', (e) => {
+    changeSetting({ contrast: e.target.checked ? 'high' : 'normal' });
+  });
+  $('speakToggle').addEventListener('change', (e) => {
+    changeSetting({ speak: e.target.checked });
+    // Say something immediately, so the setting proves itself.
+    if (e.target.checked) speakPick('Reading picks aloud');
+  });
+
+  $('dataBtn').addEventListener('click', () => {
+    syncSettingsControls();
+    $('dataDialog').showModal();
+  });
   $('dataClose').addEventListener('click', () => $('dataDialog').close());
 
   $('exportBtn').addEventListener('click', () => {
@@ -2414,11 +2936,10 @@ dialog .dlg-actions {
       }
       const previous = state;
       state = next;
-      resetSession();
+      adoptState();
       save();
       $('dataDialog').close();
-      renderAll();
-      toast('Backup restored', () => { state = previous; resetSession(); });
+      toast('Backup restored', () => { state = previous; adoptState(); });
       $('importFile').value = '';
     });
     reader.addEventListener('error', () => {
@@ -2434,17 +2955,19 @@ dialog .dlg-actions {
     if (count && !window.confirm('Delete all ' + plural(count, 'list', 'lists') + ' and everything in them? Export a backup first if you might want them back.')) return;
     const previous = state;
     state = emptyState();
-    resetSession();
+    adoptState();
     save();
     $('dataDialog').close();
-    renderAll();
-    toast('Everything erased', () => { state = previous; resetSession(); });
+    toast('Everything erased', () => { state = previous; adoptState(); });
   });
 
   // ------------------------------------------------------------- start-up
 
   load();
+  applySettings();
   renderAll();
+  renderTimer();
+  scheduleTimerTick();
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     window.addEventListener('load', () => {

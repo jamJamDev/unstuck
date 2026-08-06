@@ -17,8 +17,9 @@ function list(name, kind, texts, extra) {
   return Object.assign(l, extra || {});
 }
 
+/** Built from emptyState so these fixtures follow the real shape as it grows. */
 function stateWith(lists, selection, history) {
-  return { schema: L.SCHEMA, lists, selection: selection || [], history: history || [] };
+  return Object.assign(L.emptyState(), { lists, selection: selection || [], history: history || [] });
 }
 
 /** Deterministic stand-in for Math.random: replays the given fractions. */
@@ -222,6 +223,133 @@ test('migrate refuses a colour that could leak into the stylesheet', () => {
     lists: [{ name: 'X', color: '#fff; background-image: url(https://evil.example/pixel)', items: [] }],
   });
   assert.equal(out.lists[0].color, L.COLORS[0], 'fell back to a safe palette colour');
+});
+
+// ------------------------------------------------------------------ timer
+
+test('a timer is stored as when it ends, so it survives a suspended tab', () => {
+  const t = L.startTimer(30, 'Reading', 1000);
+  assert.equal(t.duration, 1800000);
+  assert.equal(t.endsAt, 1801000);
+  assert.equal(t.label, 'Reading');
+  // Ten minutes later, twenty remain — measured, not counted down.
+  assert.equal(L.timerRemaining(t, 1000 + 600000), 1200000);
+});
+
+test('a timer never reports negative time, however late you look', () => {
+  const t = L.startTimer(15, '', 0);
+  assert.equal(L.timerRemaining(t, 900000), 0);
+  assert.equal(L.timerRemaining(t, 999999999), 0);
+  assert.equal(L.timerFinished(t, 999999999), true);
+  assert.equal(L.timerFinished(t, 100), false);
+});
+
+test('startTimer refuses a length that is not one', () => {
+  for (const bad of [0, -5, null, undefined, 'soon', NaN, {}]) {
+    assert.equal(L.startTimer(bad, 'x', 0), null, 'accepted ' + JSON.stringify(bad));
+  }
+  assert.equal(L.startTimer(99999, 'x', 0).duration, 24 * 60 * 60000, 'absurd lengths are capped at a day');
+});
+
+test('pausing freezes the clock and resuming gives back exactly what was left', () => {
+  const t = L.startTimer(10, 'x', 0);
+  const paused = L.pauseTimer(t, 60000);
+  assert.equal(L.timerRemaining(paused, 60000), 540000);
+  // Five minutes pass in the real world; a paused timer must not notice.
+  assert.equal(L.timerRemaining(paused, 360000), 540000);
+  const resumed = L.resumeTimer(paused, 360000);
+  assert.equal(L.timerRemaining(resumed, 360000), 540000);
+  assert.equal(resumed.pausedAt, 0);
+});
+
+test('pausing twice, or resuming a running timer, changes nothing', () => {
+  const t = L.startTimer(10, 'x', 0);
+  const paused = L.pauseTimer(t, 1000);
+  assert.deepEqual(L.pauseTimer(paused, 5000), paused);
+  assert.deepEqual(L.resumeTimer(t, 5000), t);
+});
+
+test('adding time extends a running timer and restarts a finished one', () => {
+  const t = L.startTimer(10, 'x', 0);
+  const longer = L.extendTimer(t, 5, 60000);
+  assert.equal(L.timerRemaining(longer, 60000), 840000, 'nine minutes left plus five');
+
+  const done = L.startTimer(10, 'x', 0);
+  const revived = L.extendTimer(done, 5, 900000);
+  assert.equal(L.timerRemaining(revived, 900000), 300000, 'a finished timer restarts from now');
+});
+
+test('normalizeTimer keeps a usable timer and drops a broken one', () => {
+  const good = { duration: 1000, endsAt: 5000, label: 'x', pausedAt: 0 };
+  assert.deepEqual(L.normalizeTimer(good), good);
+  for (const bad of [null, undefined, 'timer', {}, { duration: 0, endsAt: 5 }, { duration: 'ten', endsAt: 5 },
+    { duration: 5, endsAt: 'later' }]) {
+    assert.equal(L.normalizeTimer(bad), null, 'accepted ' + JSON.stringify(bad));
+  }
+});
+
+test('formatClock counts in minutes, and only shows hours when there are some', () => {
+  assert.equal(L.formatClock(0), '0:00');
+  assert.equal(L.formatClock(1000), '0:01');
+  assert.equal(L.formatClock(59000), '0:59');
+  assert.equal(L.formatClock(60000), '1:00');
+  assert.equal(L.formatClock(1800000), '30:00');
+  assert.equal(L.formatClock(3600000), '1:00:00');
+  assert.equal(L.formatClock(-5000), '0:00', 'overdue reads as zero, not backwards');
+  assert.equal(L.formatClock(1500), '0:02', 'a part-second still counts as remaining');
+});
+
+test('formatMinutes reads the way a person would say it', () => {
+  assert.equal(L.formatMinutes(0), 'Off');
+  assert.equal(L.formatMinutes(15), '15 min');
+  assert.equal(L.formatMinutes(60), '1 hour');
+  assert.equal(L.formatMinutes(90), '1 hour 30 min');
+  assert.equal(L.formatMinutes(120), '2 hours');
+});
+
+test('a list carries its own standing timer length, validated', () => {
+  assert.equal(L.newList('A', 'once', 'sky', { timerMinutes: 30 }).timerMinutes, 30);
+  assert.equal(L.newList('A', 'once', 'sky').timerMinutes, 0, 'no timer is the default');
+  assert.equal(L.normalizeTimerMinutes('45'), 45);
+  assert.equal(L.normalizeTimerMinutes(-5), 0);
+  assert.equal(L.normalizeTimerMinutes('soon'), 0);
+  assert.equal(L.migrate({ lists: [{ name: 'X', timerMinutes: 20, items: [] }] }).lists[0].timerMinutes, 20);
+});
+
+// --------------------------------------------------------------- settings
+
+test('settings fall back to safe defaults rather than trusting the file', () => {
+  assert.deepEqual(L.normalizeSettings(), L.DEFAULT_SETTINGS);
+  assert.deepEqual(L.normalizeSettings('nonsense'), L.DEFAULT_SETTINGS);
+  assert.deepEqual(L.normalizeSettings({ textScale: 'huge', contrast: 'weird', motion: 'spin', speak: 'yes' }), {
+    textScale: 'normal', contrast: 'normal', motion: 'auto', speak: true,
+  });
+});
+
+test('settings that are valid are kept as they are', () => {
+  const wanted = { textScale: 'larger', contrast: 'high', motion: 'reduced', speak: true };
+  assert.deepEqual(L.normalizeSettings(wanted), wanted);
+});
+
+test('every text scale is a real multiplier', () => {
+  for (const [name, scale] of Object.entries(L.TEXT_SCALES)) {
+    assert.ok(scale >= 1 && scale <= 2, name + ' has an unusable scale: ' + scale);
+  }
+  assert.equal(L.TEXT_SCALES.normal, 1);
+});
+
+test('a state with settings and a running timer round-trips through migrate', () => {
+  const s = L.emptyState();
+  s.settings = { textScale: 'large', contrast: 'high', motion: 'full', speak: true };
+  s.timer = { duration: 60000, endsAt: 123456, label: 'Reading', pausedAt: 0 };
+  assert.deepEqual(L.migrate(JSON.parse(JSON.stringify(s))), s);
+});
+
+test('an older save with no settings or timer still loads', () => {
+  const out = L.migrate({ schema: 1, lists: [{ name: 'X', kind: 'todo', items: [] }] });
+  assert.deepEqual(out.settings, L.DEFAULT_SETTINGS);
+  assert.equal(out.timer, null);
+  assert.equal(out.lists[0].timerMinutes, 0);
 });
 
 // ------------------------------------------------------------------- pool
@@ -471,7 +599,7 @@ test('listFromStarter builds a real, independent list', () => {
 
 test('a starter list survives the save/load round-trip unchanged', () => {
   const lists = L.STARTER_LISTS.map(L.listFromStarter);
-  const s = { schema: L.SCHEMA, lists, selection: [], history: [] };
+  const s = Object.assign(L.emptyState(), { lists });
   assert.deepEqual(L.migrate(JSON.parse(JSON.stringify(s))), s);
 });
 
