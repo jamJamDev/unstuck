@@ -62,12 +62,12 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (110 checks, `node --test`, zero dependencies) — validation and coercion
+- **`tests/logic.test.js`** (111 checks, `node --test`, zero dependencies) — validation and coercion
   in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
   selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
   directions, every nest / move / promote / reorder, and the pick algorithm with an injected RNG so
   every branch is deterministic.
-- **`tests/dom.test.html`** (78 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/dom.test.html`** (81 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was checked, that a kind change keeps every item, that the two display switches are
@@ -198,10 +198,13 @@ the row above, **Ctrl/⌘ + ←** lifts a step back out.
 
 A list can carry a standing timer length (List options → Timer). Accepting a pick from that list starts
 it automatically — no prompt, no duration to choose, because the point of setting one is that you
-already decided. A list without one shows `15 / 30 / 45 / 1 hour` on the accepted card instead, so
-timing it ad hoc costs one tap. "Set a timer" on the Decide screen covers timing something that was
-never a pick: it borrows the card to ask a length, and carries **Never mind** (or Esc) because not
-wanting one is as valid an answer as any of the four, and a screen you cannot back out of is a trap.
+already decided. A list without one shows `15 min / 30 min / 45 min / 1 hr / Custom` on the accepted
+card instead, so timing it ad hoc costs one tap, and **Custom** opens a field for any length the four
+chips do not cover. "Set a timer" on the Decide screen covers timing something that was never a pick:
+it borrows the card to ask a length, and carries **Never mind** (or Esc) at the foot, under the
+lengths, because not wanting one is as valid an answer as any of them and a screen you cannot back
+out of is a trap. That card's headline already asks "How long?", so the offer drops its own "Time
+it?" label there and keeps it on the accepted card, where the card is saying something else.
 
 While it runs, a bar above the tab bar shows the countdown with pause, +5 and stop, on every screen
 and within thumb reach.

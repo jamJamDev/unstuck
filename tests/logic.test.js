@@ -307,6 +307,15 @@ test('formatMinutes reads the way a person would say it', () => {
   assert.equal(L.formatMinutes(120), '2 hours');
 });
 
+test('formatMinutesShort trims the same length down to chip width', () => {
+  // Five chips have to sit across a phone, so the hour spells out as "hr".
+  assert.equal(L.formatMinutesShort(0), 'Off');
+  assert.equal(L.formatMinutesShort(45), '45 min');
+  assert.equal(L.formatMinutesShort(60), '1 hr');
+  assert.equal(L.formatMinutesShort(90), '1 hr 30');
+  assert.equal(L.formatMinutesShort(120), '2 hr');
+});
+
 test('a list carries its own standing timer length, validated', () => {
   assert.equal(L.newList('A', 'once', 'sky', { timerMinutes: 30 }).timerMinutes, 30);
   assert.equal(L.newList('A', 'once', 'sky').timerMinutes, 0, 'no timer is the default');

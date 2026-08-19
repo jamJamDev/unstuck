@@ -1104,6 +1104,33 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   font-weight: 600;
 }
 .timer-presets button:hover { border-color: var(--accent); color: var(--accent); }
+.timer-presets button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+/* The offer stacks: chips, then the custom field, then the way out — each on its
+   own row, so the button that leaves is never mistaken for one that starts something. */
+.timer-offer > #timerPresets,
+.timer-offer > #timerCustom,
+.timer-offer > #timerError,
+.timer-offer > #timerCancel { flex: 1 0 100%; }
+.timer-custom { display: flex; gap: 8px; }
+.timer-custom input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+.timer-custom input:focus { border-color: var(--list-color, var(--accent)); outline: none; }
+/* The stepper arrows are a mouse affordance on a field that is typed into on a phone. */
+.timer-custom input::-webkit-outer-spin-button,
+.timer-custom input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.timer-custom input { -moz-appearance: textfield; appearance: textfield; }
+.timer-custom .btn { flex: none; width: auto; }
+#timerCancel { width: 100%; }
 
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 
@@ -1320,8 +1347,16 @@ dialog select:focus { border-color: var(--accent); outline: none; }
             <button id="doBtn" class="btn primary">I'm doing it</button>
           </div>
           <div id="timerOffer" class="timer-offer" hidden>
-            <span>Time it?</span>
+            <span id="timerOfferLabel">Time it?</span>
             <div id="timerPresets" class="timer-presets"></div>
+            <form id="timerCustom" class="timer-custom" hidden>
+              <label class="sr-only" for="timerMinutes">How many minutes?</label>
+              <input id="timerMinutes" type="number" inputmode="numeric" min="1" max="1440" step="1"
+                     placeholder="Minutes" autocomplete="off">
+              <button type="submit" class="btn primary">Start</button>
+            </form>
+            <p id="timerError" class="seg-note" role="alert" hidden></p>
+            <button type="button" id="timerCancel" class="btn" hidden>Never mind</button>
           </div>
           <p id="swipeHint" class="swipe-hint"></p>
         </div>
@@ -3304,7 +3339,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     session.current = null;
     session.settled = false;
     session.timerAsk = false;
-    $('doBtn').textContent = 'I’m doing it';
+    showTimerCustom(false);
     // Retires any riffle still in flight, which would otherwise settle onto a closed card.
     session.gen += 1;
     const card = $('card');
@@ -3520,9 +3555,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   });
 
   $('doBtn').addEventListener('click', () => {
-    // The same button is "Never mind" while a timer length is being asked for,
-    // and "Pick another" after accepting.
-    if (session.timerAsk) { closeTimerAsk(); return; }
+    // After accepting, the same button becomes "Pick another".
     if (!session.current) { doPick(); return; }
     accept();
   });
@@ -3652,29 +3685,76 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     $('announcer').textContent = message;
   }
 
+  /** Which list a running offer would name, so the custom field can start one too. */
+  let offerList = null;
+
   function renderTimerOffer(list) {
     const offer = $('timerOffer');
     const box = $('timerPresets');
     // A list with its own timer already started one; nothing to offer.
     const show = !state.timer && (!list || !list.timerMinutes);
     offer.hidden = !show;
+    offerList = list;
+    showTimerCustom(false);
+    // The standalone ask already reads "How long?" above; a second prompt on the
+    // same card would only repeat it.
+    $('timerOfferLabel').hidden = session.timerAsk;
+    $('timerCancel').hidden = !session.timerAsk;
     if (!show) return;
     box.textContent = '';
     for (const minutes of L.TIMER_PRESETS) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = L.formatMinutes(minutes);
-      b.addEventListener('click', () => {
-        askForAlarmPermission();
-        startTimerFor(minutes, list ? list.name : '');
-        // The standalone ask exists only to collect a length; the running timer
-        // bar is the answer, so the card has nothing left to say.
-        if (session.timerAsk) closeTimerAsk();
-        else renderTimerOffer(list);
-      });
-      box.appendChild(b);
+      box.appendChild(presetButton(L.formatMinutesShort(minutes), () => beginTimer(minutes)));
     }
+    const custom = presetButton('Custom', () => showTimerCustom(!customOpen()));
+    custom.id = 'timerCustomBtn';
+    custom.setAttribute('aria-expanded', 'false');
+    box.appendChild(custom);
   }
+
+  function presetButton(label, run) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.addEventListener('click', run);
+    return b;
+  }
+
+  const customOpen = () => !$('timerCustom').hidden;
+
+  function showTimerCustom(open) {
+    $('timerCustom').hidden = !open;
+    $('timerError').hidden = true;
+    $('timerMinutes').removeAttribute('aria-invalid');
+    const toggle = $('timerCustomBtn');
+    if (toggle) toggle.setAttribute('aria-expanded', String(open));
+    if (!open) { $('timerMinutes').value = ''; return; }
+    $('timerMinutes').focus({ preventScroll: true });
+  }
+
+  /** The one way a length becomes a running timer, whichever control chose it. */
+  function beginTimer(minutes) {
+    askForAlarmPermission();
+    startTimerFor(minutes, offerList ? offerList.name : '');
+    // The standalone ask exists only to collect a length; the running timer bar
+    // is the answer, so the card has nothing left to say.
+    if (session.timerAsk) closeTimerAsk();
+    else renderTimerOffer(offerList);
+  }
+
+  $('timerCustom').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const minutes = L.normalizeTimerMinutes($('timerMinutes').value);
+    if (!minutes) {
+      $('timerError').textContent = 'Give it a number of minutes, 1 or more.';
+      $('timerError').hidden = false;
+      $('timerMinutes').setAttribute('aria-invalid', 'true');
+      $('timerMinutes').focus({ preventScroll: true });
+      return;
+    }
+    beginTimer(minutes);
+  });
+
+  $('timerCancel').addEventListener('click', closeTimerAsk);
 
   $('timerStop').addEventListener('click', stopTimer);
 
@@ -3706,8 +3786,9 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     $('cardWhat').textContent = 'How long?';
     $('cardMeta').textContent = '';
     $('skipBtn').hidden = true;
-    $('doBtn').hidden = false;
-    $('doBtn').textContent = 'Never mind';
+    // The way out sits at the foot of the offer instead, under the lengths, so
+    // nothing that leaves shares a row with something that starts a timer.
+    $('doBtn').hidden = true;
     $('swipeHint').textContent = coarsePointer.matches ? '' : 'Or press Esc';
     paintColor($('card'), 'card', COLORS[0]);
     renderDecide();

@@ -1144,7 +1144,7 @@
     await waitFor(() => shown(app.win, app.$('timerOffer')), 'the presets');
 
     const presets = [...app.doc.querySelectorAll('#timerPresets button')].map((b) => b.textContent);
-    equal(presets.join(','), '15 min,30 min,45 min,1 hour');
+    equal(presets.join(','), '15 min,30 min,45 min,1 hr,Custom');
     equal(shown(app.win, app.$('timerBar')), false, 'still nothing running');
 
     app.doc.querySelectorAll('#timerPresets button')[0].click();
@@ -1158,10 +1158,16 @@
     const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
     app.$('standaloneTimer').click();
     await waitFor(() => shown(app.win, app.$('timerOffer')), 'the presets');
-    equal(shown(app.win, app.$('doBtn')), true, 'there must be a way back out');
-    equal(app.$('doBtn').textContent, 'Never mind');
+    equal(shown(app.win, app.$('timerCancel')), true, 'there must be a way back out');
+    equal(shown(app.win, app.$('timerOfferLabel')), false, 'the card already asks "How long?"');
+    // The way out belongs under the lengths, not above them.
+    const order = app.$('timerOffer').compareDocumentPosition(app.$('timerCancel'));
+    equal(Boolean(order & app.win.Node.DOCUMENT_POSITION_CONTAINED_BY), true, 'it lives in the offer');
+    equal(app.$('timerPresets').compareDocumentPosition(app.$('timerCancel'))
+      & app.win.Node.DOCUMENT_POSITION_FOLLOWING, app.win.Node.DOCUMENT_POSITION_FOLLOWING,
+      'the cancel must come after the lengths');
 
-    app.$('doBtn').click();
+    app.$('timerCancel').click();
     await waitFor(() => !shown(app.win, app.$('card')), 'the card to close');
     equal(stored().timer, null, 'leaving must not start a timer');
     equal(shown(app.win, app.$('pickBtn')), true, 'the pick button comes back');
@@ -1190,6 +1196,53 @@
     equal(app.$('timerClock').textContent, '30:00');
     equal(app.$('timerLabel').textContent, 'Timer', 'no list to name, so it is just a timer');
     equal(shown(app.win, app.$('card')), false, 'the ask has nothing left to say');
+  });
+
+  test('a custom length can be typed when none of the presets fit', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('standaloneTimer').click();
+    await waitFor(() => shown(app.win, app.$('timerOffer')), 'the presets');
+    const chips = [...app.doc.querySelectorAll('#timerPresets button')].map((b) => b.textContent);
+    equal(chips.join(','), '15 min,30 min,45 min,1 hr,Custom', 'the hour shortens to make room');
+    equal(shown(app.win, app.$('timerCustom')), false, 'the field stays out of the way until asked for');
+
+    app.$('timerCustomBtn').click();
+    await waitFor(() => shown(app.win, app.$('timerCustom')), 'the field');
+    equal(app.doc.activeElement, app.$('timerMinutes'), 'it should be ready to type into');
+
+    app.$('timerMinutes').value = '7';
+    app.$('timerCustom').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => shown(app.win, app.$('timerBar')), 'the timer to start');
+    equal(app.$('timerClock').textContent, '7:00');
+    equal(shown(app.win, app.$('card')), false, 'and the ask closes like any other length');
+  });
+
+  test('a custom length that is not a length is refused, not started', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('standaloneTimer').click();
+    await waitFor(() => shown(app.win, app.$('timerOffer')), 'the presets');
+    app.$('timerCustomBtn').click();
+    await waitFor(() => shown(app.win, app.$('timerCustom')), 'the field');
+
+    app.$('timerMinutes').value = '0';
+    app.$('timerCustom').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
+    await waitFor(() => shown(app.win, app.$('timerError')), 'the complaint');
+    equal(stored().timer, null, 'nothing may start from a length of zero');
+    equal(app.$('timerMinutes').getAttribute('aria-invalid'), 'true');
+    equal(shown(app.win, app.$('card')), true, 'the ask stays open to be corrected');
+  });
+
+  test('the accepted card still says what its lengths are for', async () => {
+    // The label is redundant on the standalone ask, which asks "How long?" already,
+    // but here the card is showing a completion message instead.
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('pickBtn').click();
+    await settled(app);
+    app.$('doBtn').click();
+    await waitFor(() => shown(app.win, app.$('timerOffer')), 'the presets');
+    equal(shown(app.win, app.$('timerOfferLabel')), true);
+    equal(app.$('timerOfferLabel').textContent, 'Time it?');
+    equal(shown(app.win, app.$('timerCancel')), false, '"Pick another" is the way on from here');
   });
 
   test('a running timer survives a reload and keeps the right time', async () => {

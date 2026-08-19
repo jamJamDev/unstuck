@@ -6,16 +6,22 @@ this is state and direction only.
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-110 unit checks (`./test.sh`) and 78 browser checks (`./test.sh --browser`) passing.
+111 unit checks (`./test.sh`) and 81 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
 switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
 settings.
 
-**Uncommitted:** "Set a timer" on the Decide screen had no way out — it borrowed the pick card to ask
-a length, and hid every button on it, so a user who did not want a timer after all was stuck on that
-screen. It now carries **Never mind** (Esc on a keyboard), and choosing a length closes it, since the
-running timer bar is the whole answer.
+**Uncommitted:** the timer offer gained a **Custom** chip — a typed length for anything the four
+presets do not cover, refused loudly rather than started when it is not a number of minutes. Never
+mind moved to the foot of the offer, under the lengths. "Time it?" is gone from the standalone ask,
+where the card headline already asks "How long?", and kept on the accepted card, which is busy
+saying something else. `1 hour` reads `1 hr` on a chip to make room; five chips still wrap to two
+rows on a 360px phone, which is fine — Custom reading as its own row is honest.
+
+Shipped in 9409a6f: "Set a timer" on the Decide screen had no way out — it borrowed the pick card to
+ask a length, and hid every button on it, so a user who did not want a timer after all was stuck on
+that screen.
 
 Shipped in 88bf31f: the drag now reorders as well as nests — the middle of a row files the dragged thing
 in, either edge drops it there with a coloured line showing where, on every kind of list. The lifted
@@ -90,6 +96,7 @@ plan. Only the code is public; lists live in each device's storage and never lea
 
 ## Ideas, not commitments
 
-- Custom timer length per list — the menu is a fixed set of common values right now.
+- A typed length in **List options → Timer** as well. The offer on the card takes one now; the
+  per-list standing length is still a fixed menu.
 - An in-app override for handedness, if reaching the top-left back arrow ever annoys you. The system
   back gesture already covers most of it.

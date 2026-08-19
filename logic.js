@@ -348,6 +348,15 @@ var UnstuckLogic = (() => {
     return rest ? hourPart + ' ' + rest + ' min' : hourPart;
   }
 
+  /** The same length on a chip, where the row has to fit five of them across a phone. */
+  function formatMinutesShort(minutes) {
+    if (!minutes) return 'Off';
+    if (minutes < 60) return minutes + ' min';
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest ? hours + ' hr ' + rest : hours + ' hr';
+  }
+
   // -------------------------------------------------------- completing things
 
   /**
@@ -609,7 +618,7 @@ var UnstuckLogic = (() => {
     normalizeHex, normalizeColor, isCustomColor, hsvToHex, hexToHsv,
     TIMER_PRESETS, TEXT_SCALES, DEFAULT_SETTINGS, normalizeSettings, normalizeTimerMinutes,
     startTimer, timerRemaining, timerFinished, pauseTimer, resumeTimer, extendTimer,
-    normalizeTimer, formatClock, formatMinutes,
+    normalizeTimer, formatClock, formatMinutes, formatMinutesShort,
     setDone, logSession, subsDone, allSubsDone, setSubsDone, setDoneWithSubs, syncFromSubs,
     subFromItem, nestItem, moveSub, promoteSub, moveItemBeside, moveSubBeside,
     listById, isPickable, pickableCount, activeLists, pool,
