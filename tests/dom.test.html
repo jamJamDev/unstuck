@@ -1301,6 +1301,28 @@
     assert(parseFloat(again.win.getComputedStyle(again.doc.documentElement).fontSize) > base);
   });
 
+  test('the tip jar leaves the app safely, and stays at the bottom of Settings', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('dataBtn').click();
+    const tip = app.$('tipLink');
+    equal(shown(app.win, tip), true, 'it should be reachable, just not loud');
+    equal(tip.getAttribute('href'), 'https://ko-fi.com/dreamdrawerstudio', 'a dead link is worse than none');
+    equal(tip.getAttribute('target'), '_blank');
+    // Without noopener the opened page can reach back through window.opener.
+    const rel = tip.getAttribute('rel').split(/\s+/);
+    equal(rel.includes('noopener'), true, 'the tab it opens must not reach back');
+    equal(rel.includes('noreferrer'), true);
+
+    // Nothing may fetch from ko-fi while the app is running: the app's promise is
+    // that nothing leaves the device until you deliberately tap out of it.
+    const html = app.doc.documentElement.outerHTML;
+    equal(/<(script|img|iframe)[^>]+ko-fi/i.test(html), false, 'no third-party asset may be embedded');
+
+    const actions = app.doc.querySelector('#dataDialog .dlg-actions');
+    equal(actions.compareDocumentPosition(tip) & app.win.Node.DOCUMENT_POSITION_FOLLOWING,
+      app.win.Node.DOCUMENT_POSITION_FOLLOWING, 'it belongs under the buttons, not among them');
+  });
+
   test('turning animation off makes a pick land instantly', async () => {
     const state = stateOf([listOf('once', 'Chores', ['Wash up', 'Bins out'])]);
     state.settings = { textScale: 'normal', contrast: 'normal', motion: 'reduced', speak: false };

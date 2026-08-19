@@ -67,7 +67,7 @@ Two suites, split by what each can actually reach:
   selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
   directions, every nest / move / promote / reorder, and the pick algorithm with an injected RNG so
   every branch is deterministic.
-- **`tests/dom.test.html`** (81 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/dom.test.html`** (82 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was checked, that a kind change keeps every item, that the two display switches are
@@ -316,6 +316,20 @@ rescue data this build failed to read.
 
 Backups are plain JSON via **Backup & data** (the gear icon), which is also how you move lists
 between devices — storage is per-device and per-browser.
+
+## The tip jar
+
+The last row in Settings links out to [Ko-fi](https://ko-fi.com/dreamdrawerstudio). It is a plain
+`<a>` with `target="_blank"` and `rel="noopener noreferrer"` — no embedded widget, no badge image, no
+third-party script, so the app still makes no network request of its own and keeps working offline.
+It sits below the buttons, under a hairline, with no border or fill: an offer, not a control. The jar
+is inline SVG in the accent colour for the same reason an image file would be wrong here.
+
+Nothing is paywalled and nothing nags. A tip unlocks nothing, which is the point — the alternative
+designs (ads in the pick loop, or a paid timer) both attack the thing the app exists to do.
+
+Play Billing is not involved and cannot be: this is the hosted web build. If the wrapped Android
+build ever ships with this row, check the current Play rules on external payment links first.
 
 ## Shipping to the stores
 

@@ -6,13 +6,19 @@ this is state and direction only.
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-111 unit checks (`./test.sh`) and 81 browser checks (`./test.sh --browser`) passing.
+111 unit checks (`./test.sh`) and 82 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
 switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
 settings.
 
-**Uncommitted:** the timer offer gained a **Custom** chip — a typed length for anything the four
+**Uncommitted:** a **tip jar** row at the foot of Settings, linking out to Ko-fi. Chosen over ads and
+over a paid timer: ads would land in the one moment the app exists for, and the timer is core to
+time-boxing, so charging for it reads as "why isn't that free". A tip unlocks nothing, so nobody is
+frustrated. Deliberately a plain link, never Ko-fi's widget script — an embedded third party would
+end the "nothing leaves the device" promise and break offline.
+
+Shipped in bd56ae2: the timer offer gained a **Custom** chip — a typed length for anything the four
 presets do not cover, refused loudly rather than started when it is not a number of minutes. Never
 mind moved to the foot of the offer, under the lengths. "Time it?" is gone from the standalone ask,
 where the card headline already asks "How long?", and kept on the accepted card, which is busy
@@ -93,6 +99,12 @@ plan. Only the code is public; lists live in each device's storage and never lea
   go: the middle files in, either edge inserts. Two gestures for one finger would have been the
   worse answer. Order still means nothing to the picker on any kind of list — it is uniform random
   regardless — but it makes a long list readable, which is why it earns the gesture.
+
+- **Free, no ads, nothing paywalled — a tip jar instead.** An ad would sit in the exact moment the
+  app exists to smooth over, and would cost the "nothing leaves the device" promise (tracking SDK,
+  consent prompt, privacy policy) for a few dollars a month at realistic install numbers. A paid
+  timer fails differently: time-boxing is core to getting unstuck, so charging for it reads as
+  "why isn't that just free". The tip unlocks nothing on purpose.
 
 ## Ideas, not commitments
 

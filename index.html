@@ -1009,6 +1009,34 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   border-radius: 12px;
   cursor: pointer;
 }
+/* The last thing in Settings, and the quietest: no border, no fill, so it reads as
+   an offer rather than a control. It leaves the app, which the label says outright. */
+.tip-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 12px 4px 0;
+  border-top: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+}
+.tip-row > span:not(.tip-out) { flex: 1; min-width: 0; }
+.tip-row strong { display: block; font-size: 0.9375rem; }
+.tip-row small { color: var(--muted); font-size: 0.8125rem; line-height: 1.45; }
+.tip-row .tip-out { color: var(--muted); font-size: 0.875rem; }
+.tip-row:hover strong, .tip-row:focus-visible strong { color: var(--accent); }
+.tip-jar {
+  flex: none;
+  width: 26px; height: 26px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+.tip-coin { transition: transform 260ms ease; }
+.tip-row:hover .tip-coin { transform: translateY(3.4px); }
+
 .switch-row > span { flex: 1; min-width: 0; }
 .switch-row strong { display: block; font-size: 0.9375rem; }
 .switch-row small { color: var(--muted); font-size: 0.8125rem; }
@@ -1600,6 +1628,21 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       <button class="btn ghost" id="dataClose">Close</button>
     </div>
     <input id="importFile" type="file" accept="application/json,.json" class="sr-only" tabindex="-1" aria-hidden="true">
+
+    <a id="tipLink" class="tip-row" href="https://ko-fi.com/dreamdrawerstudio"
+       target="_blank" rel="noopener noreferrer">
+      <svg class="tip-jar" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle class="tip-coin" cx="12" cy="3.2" r="2.1"></circle>
+        <rect x="4.8" y="7.4" width="14.4" height="3" rx="1.3"></rect>
+        <path d="M6.2 10.4h11.6v6.6a3.4 3.4 0 0 1-3.4 3.4H9.6a3.4 3.4 0 0 1-3.4-3.4z"></path>
+      </svg>
+      <span>
+        <strong>Tip jar</strong>
+        <small>Free, and staying free — but if you’d like, you can tip me on Ko-fi.<span
+          class="sr-only"> Opens in a new tab.</span></small>
+      </span>
+      <span class="tip-out" aria-hidden="true">↗</span>
+    </a>
   </div>
 </dialog>
 
