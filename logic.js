@@ -433,11 +433,13 @@ var UnstuckLogic = (() => {
    * the moved item already had arrive beside it rather than underneath.
    * Returns false when the move is not a real one.
    */
-  function nestItem(list, item, parent) {
-    const at = list.items.indexOf(item);
-    if (at === -1 || item === parent || !list.items.includes(parent)) return false;
-    list.items.splice(at, 1);
-    parent.subs.push(subFromItem(item), ...item.subs);
+  function nestItem(list, item, parent, at) {
+    const from = list.items.indexOf(item);
+    if (from === -1 || item === parent || !list.items.includes(parent)) return false;
+    list.items.splice(from, 1);
+    const moved = [subFromItem(item), ...item.subs];
+    const where = at === undefined ? parent.subs.length : Math.max(0, Math.min(parent.subs.length, at));
+    parent.subs.splice(where, 0, ...moved);
     item.subs = [];
     return true;
   }
@@ -454,16 +456,38 @@ var UnstuckLogic = (() => {
   /**
    * Lifts a step back out to stand on its own, directly after what it came from.
    * A checked step becomes a checked item, which is one completion, so its tally
-   * starts where `setDone` would have put it.
+   * starts where `setDone` would have put it. Returns the new item.
    */
   function promoteSub(list, parent, sub, now) {
     const at = parent.subs.indexOf(sub);
-    if (at === -1) return false;
+    if (at === -1) return null;
     parent.subs.splice(at, 1);
     const item = newItem(sub.text);
     item.id = sub.id;
     if (sub.done) setDone(item, true, now);
     list.items.splice(list.items.indexOf(parent) + 1, 0, item);
+    return item;
+  }
+
+  /**
+   * Reordering is expressed against a neighbour rather than an index, because
+   * the screen only ever shows part of a list — finished things sit in their own
+   * pile — and "after that one" survives that where a position does not.
+   */
+  function moveItemBeside(list, item, target, after) {
+    const from = list.items.indexOf(item);
+    if (item === target || from === -1 || !list.items.includes(target)) return false;
+    list.items.splice(from, 1);
+    list.items.splice(list.items.indexOf(target) + (after ? 1 : 0), 0, item);
+    return true;
+  }
+
+  /** The same for steps, within one owner or across two. */
+  function moveSubBeside(from, sub, to, target, after) {
+    const at = from.subs.indexOf(sub);
+    if (sub === target || at === -1 || !to.subs.includes(target)) return false;
+    from.subs.splice(at, 1);
+    to.subs.splice(to.subs.indexOf(target) + (after ? 1 : 0), 0, sub);
     return true;
   }
 
@@ -587,7 +611,7 @@ var UnstuckLogic = (() => {
     startTimer, timerRemaining, timerFinished, pauseTimer, resumeTimer, extendTimer,
     normalizeTimer, formatClock, formatMinutes,
     setDone, logSession, subsDone, allSubsDone, setSubsDone, setDoneWithSubs, syncFromSubs,
-    subFromItem, nestItem, moveSub, promoteSub,
+    subFromItem, nestItem, moveSub, promoteSub, moveItemBeside, moveSubBeside,
     listById, isPickable, pickableCount, activeLists, pool,
     recentDepth, chooseFrom, pushHistory,
     plural, relativeDay, listSummary, cardMeta,

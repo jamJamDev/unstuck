@@ -6,14 +6,23 @@ this is state and direction only.
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-100 unit checks (`./test.sh`) and 68 browser checks (`./test.sh --browser`) passing.
+110 unit checks (`./test.sh`) and 75 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
 switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
 settings.
 
-**Uncommitted:** drag-to-nest — hold a row to pick it up, drop it on another to file it as a step,
-drop a step on nothing to lift it back out. Ctrl/⌘ + ↑ and Ctrl/⌘ + ← do the same without a drag.
+**Uncommitted:** the drag now reorders as well as nests — the middle of a row files the dragged thing
+in, either edge drops it there with a coloured line showing where, on every kind of list. The lifted
+row wobbles and the phone buzzes twice so it is obvious it has been picked up. Ctrl/⌘ with the four
+arrows does the same from a keyboard.
+
+The nesting drag did not work on a real phone in the round before this: the non-passive `touchmove`
+listener that stops the list scrolling was registered when the row lifted, half a second into the
+touch, but a browser fixes whether a touch may scroll as it *starts* and counts only the blocking
+listeners already present. It is registered at startup now. Neither suite caught it — synthetic
+pointer events and CDP touch both bypass that decision entirely, so it is a hand-test-only class of
+bug on this surface.
 
 The repo is **public**, which it had to be — GitHub Pages will not serve a private repo on the free
 plan. Only the code is public; lists live in each device's storage and never leave it.
@@ -69,8 +78,10 @@ plan. Only the code is public; lists live in each device's storage and never lea
   and got pressed by a thumb reaching to add an item.
 - **Nesting is one level.** Steps of a moved thing arrive beside it, never underneath. A second
   level is not a data problem, it is a card problem — the picked card has room for one checklist.
-- **No reordering by drag.** Picking is uniform random, so the order of a list carries no meaning;
-  a reorder gesture would only compete with the nest one for the same finger.
+- **One drag does both nesting and reordering**, split by where on the target row the finger lets
+  go: the middle files in, either edge inserts. Two gestures for one finger would have been the
+  worse answer. Order still means nothing to the picker on any kind of list — it is uniform random
+  regardless — but it makes a long list readable, which is why it earns the gesture.
 
 ## Ideas, not commitments
 

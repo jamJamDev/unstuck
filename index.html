@@ -577,6 +577,8 @@ main {
   background: var(--surface);
   border: 1px solid transparent;
   border-radius: 12px;
+  /* The drop line for this row is drawn on its own edge. */
+  position: relative;
   /* A row is held to pick it up, which is also how a phone offers to select its
      text — the selection handles would land on top of the drag. */
   user-select: none;
@@ -598,7 +600,7 @@ main {
   flex-direction: column;
   gap: 2px;
 }
-.subs li { display: flex; align-items: center; gap: 8px; }
+.subs li { display: flex; align-items: center; gap: 8px; position: relative; }
 .subs .check { width: 22px; height: 22px; border-radius: 7px; font-size: 0.75rem; }
 .subs .text { font-size: 0.9375rem; padding: 4px 2px; }
 .subs .kill { min-width: 28px; min-height: 28px; font-size: 0.9375rem; }
@@ -622,24 +624,55 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
-/* Dragging one thing onto another files it as a step. The lifted row follows the
-   finger; the row it is over says so by lighting up. */
+/* Held to pick up, dropped to file. A row lands *in* what it is over, or
+   *between* two things — the middle of a row takes it in, the edges put it
+   beside. Which one is on offer has to be readable at a glance mid-drag. */
 .item.lifted, .subs li.lifted {
-  position: relative;
   z-index: 3;
-  opacity: 0.9;
-  box-shadow: 0 12px 28px -10px rgba(0,0,0,0.6);
+  box-shadow: 0 14px 30px -10px rgba(0,0,0,0.7);
   cursor: grabbing;
-  /* The pointer is captured by the screen, so the row itself can stay out of the
-     way of the hit test that decides what it is over. */
+  /* The row follows the finger through `transform`, so the wobble that says it
+     is loose rides on `rotate` — an separate property, which composes with it
+     rather than overwriting it. */
+  scale: 1.04;
+  animation: wobble 460ms ease-in-out infinite;
+  /* The pointer is tracked on the document, so the row itself can stay out of
+     the way of the hit test that decides what it is over. */
   pointer-events: none;
 }
-.item.lifted { background: var(--surface-2); }
-.item.drop-into, .subs li.drop-into {
+.item.lifted { background: var(--surface-2); border-color: var(--list-color, var(--accent)); }
+.subs li.lifted { background: var(--surface-2); border-radius: 10px; }
+
+@keyframes wobble {
+  0%   { rotate: -1.1deg; }
+  25%  { rotate: 0.7deg; }
+  50%  { rotate: 1.2deg; }
+  75%  { rotate: -0.6deg; }
+  100% { rotate: -1.1deg; }
+}
+
+.item.drop-into {
   outline: 2px solid var(--list-color, var(--accent));
   outline-offset: -1px;
   background: var(--surface-2);
 }
+
+/* Where it would land, drawn on the edge it would land against. */
+.item.drop-before::before,
+.item.drop-after::after,
+.subs li.drop-before::before,
+.subs li.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--list-color, var(--accent));
+}
+.item.drop-before::before, .subs li.drop-before::before { top: -5px; }
+.item.drop-after::after, .subs li.drop-after::after { bottom: -5px; }
+
 .drop-out {
   outline: 2px dashed var(--list-color, var(--accent));
   outline-offset: 3px;
@@ -2007,7 +2040,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     // even though `done` is still carried underneath for the other kinds.
     row.className = 'item' + (item.done && list.kind !== 'endless' ? ' checked' : '');
     row.dataset.item = item.id;
-    row.setAttribute('aria-keyshortcuts', 'Control+ArrowUp');
+    row.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown Control+ArrowRight');
 
     if (list.kind === 'endless') {
       const tally = document.createElement('button');
@@ -2103,7 +2136,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       const li = document.createElement('li');
       li.className = sub.done ? 'checked' : '';
       li.dataset.sub = sub.id;
-      li.setAttribute('aria-keyshortcuts', 'Control+ArrowLeft');
+      li.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown Control+ArrowLeft');
 
       const check = document.createElement('button');
       check.type = 'button';
@@ -2354,6 +2387,47 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     }, '“' + sub.text + '” is a thing of its own again');
   }
 
+  /** The same, landing on a chosen side of another thing rather than after its owner. */
+  function promoteSubBeside(list, parent, sub, target, after) {
+    return applyMove(list, () => {
+      const item = L.promoteSub(list, parent, sub);
+      if (!item) return false;
+      L.moveItemBeside(list, item, target, after);
+      syncFromSubs(list, parent);
+      return true;
+    }, '“' + sub.text + '” is a thing of its own again');
+  }
+
+  function reorderItemBeside(list, item, target, after) {
+    return applyMove(
+      list,
+      () => L.moveItemBeside(list, item, target, after),
+      '“' + item.text + '” moved ' + (after ? 'after' : 'before') + ' “' + target.text + '”'
+    );
+  }
+
+  function reorderSub(list, from, sub, to, target, after) {
+    return applyMove(list, () => {
+      if (!L.moveSubBeside(from, sub, to, target, after)) return false;
+      syncFromSubs(list, from);
+      syncFromSubs(list, to);
+      return true;
+    }, from === to
+      ? '“' + sub.text + '” moved ' + (after ? 'after' : 'before') + ' “' + target.text + '”'
+      : '“' + sub.text + '” moved to “' + to.text + '”');
+  }
+
+  /** Files a whole item in among another thing's steps, at a chosen place. */
+  function nestItemBeside(list, item, parent, target, after) {
+    return applyMove(list, () => {
+      const at = parent.subs.indexOf(target) + (after ? 1 : 0);
+      if (!L.nestItem(list, item, parent, at)) return false;
+      syncFromSubs(list, parent);
+      if (session.current && session.current.item.id === item.id) closeCard();
+      return true;
+    }, '“' + item.text + '” is now a step of “' + parent.text + '”');
+  }
+
   // ------------------------------------------------------- the drag gesture
 
   /**
@@ -2383,6 +2457,12 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   /** Scrolling must not steal a lifted row, and touch scrolling only stops here. */
   const blockScroll = (e) => { if (lift && lift.active) e.preventDefault(); };
 
+  // Registered up front rather than when the lift begins. A browser decides
+  // whether a touch may scroll as the touch starts, counting only the blocking
+  // listeners already in place: one added when the hold lands comes too late,
+  // and the list scrolls away under the drag instead of the row moving.
+  document.addEventListener('touchmove', blockScroll, { passive: false });
+
   function beginLift(row) {
     lift.active = true;
     lift.row = row;
@@ -2390,7 +2470,8 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     lift.scrollAt0 = lift.scroller.scrollTop;
     row.classList.add('lifted');
     document.body.classList.add('dragging');
-    if (navigator.vibrate) navigator.vibrate(12);
+    // Two taps, because one is easily missed as the finger settles.
+    if (navigator.vibrate) navigator.vibrate([14, 45, 22]);
     lift.scrollTimer = setInterval(edgeScroll, 16);
   }
 
@@ -2421,29 +2502,79 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     const drift = lift.scroller.scrollTop - lift.scrollAt0;
     lift.row.style.transform =
       'translate(' + (lift.x - lift.startX) + 'px,' + (lift.y - lift.startY + drift) + 'px)';
-
-    const row = rowAt(lift.x, lift.y);
-    markTarget(row && row !== lift.row && !lift.row.contains(row) ? row : null);
+    markDrop(placeUnder(lift.x, lift.y));
   }
 
-  function markTarget(row) {
-    if (lift.target === row) return;
-    if (lift.target) lift.target.classList.remove('drop-into');
-    lift.target = row;
-    if (row) row.classList.add('drop-into');
+  /**
+   * The middle of a row takes the dragged thing *in* as a step; its edges put it
+   * *beside*, at that row's own level. A step's row is edges only — one level is
+   * all there is, so there is nothing for a step to take in.
+   */
+  const INTO_BAND = 0.34;
+
+  /**
+   * The gaps between steps belong to the steps, not to the thing around them: the
+   * padding above the first one hit-tests as its owner, and landing there would
+   * read as "put this beside the whole thing" when the finger is plainly among
+   * its steps.
+   */
+  function nearestRow(row, y) {
+    const subs = row.matches('.item') ? row.querySelector(':scope > .subs') : null;
+    if (!subs) return row;
+    const box = subs.getBoundingClientRect();
+    if (y < box.top || y > box.bottom) return row;
+
+    let best = row;
+    let nearest = Infinity;
+    for (const li of subs.children) {
+      if (!li.dataset.sub) continue;
+      const b = li.getBoundingClientRect();
+      const gap = y < b.top ? b.top - y : Math.max(0, y - b.bottom);
+      if (gap < nearest) { nearest = gap; best = li; }
+    }
+    return best;
+  }
+
+  function placeUnder(x, y) {
+    const hit = rowAt(x, y);
+    const row = hit ? nearestRow(hit, y) : null;
+    if (!row || row === lift.row || lift.row.contains(row)) return null;
+    const parts = partsOf(listById(ui.openListId), row);
+    if (!parts) return null;
+
+    // An item's own line is just its header: its steps hang below it inside the
+    // same row, and each of those is a row in its own right.
+    const box = row.getBoundingClientRect();
+    const subs = row.querySelector(':scope > .subs');
+    const foot = subs ? subs.getBoundingClientRect().top : box.bottom;
+    const across = (y - box.top) / Math.max(1, foot - box.top);
+
+    const edge = parts.sub ? 0.5 : INTO_BAND;
+    if (across < edge) return { row, parts, mode: 'before' };
+    if (across > 1 - edge) return { row, parts, mode: 'after' };
+    return { row, parts, mode: 'into' };
+  }
+
+  const DROP_MARKS = ['drop-into', 'drop-before', 'drop-after'];
+
+  function markDrop(place) {
+    const same = lift.place && place && lift.place.row === place.row && lift.place.mode === place.mode;
+    if (same) return;
+    if (lift.place) lift.place.row.classList.remove(...DROP_MARKS);
+    lift.place = place;
+    if (place) place.row.classList.add('drop-' + place.mode);
     // Letting go over nothing is how a step gets back out, so say so.
-    $('openItems').classList.toggle('drop-out', Boolean(lift.sub) && !row);
+    $('openItems').classList.toggle('drop-out', Boolean(lift.sub) && !place);
   }
 
   function endLift() {
-    if (!lift) return;
+    if (!lift) return false;
     if (lift.timer) clearTimeout(lift.timer);
     if (lift.scrollTimer) clearInterval(lift.scrollTimer);
     if (lift.row) lift.row.classList.remove('lifted');
-    if (lift.target) lift.target.classList.remove('drop-into');
+    if (lift.place) lift.place.row.classList.remove(...DROP_MARKS);
     $('openItems').classList.remove('drop-out');
     document.body.classList.remove('dragging');
-    document.removeEventListener('touchmove', blockScroll);
     const wasActive = lift.active;
     lift = null;
     return wasActive;
@@ -2460,14 +2591,13 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
       x: e.clientX, y: e.clientY,
       item: parts.item, sub: parts.sub, owner: parts.owner,
-      row: null, target: null, active: false, moved: false,
+      row: null, place: null, active: false, moved: false,
       timer: 0, scrollTimer: 0, scroller: null, scrollAt0: 0,
     };
     lift.timer = setTimeout(() => {
       if (!lift) return;
       lift.timer = 0;
       beginLift(row);
-      document.addEventListener('touchmove', blockScroll, { passive: false });
     }, LONG_PRESS_MS);
   });
 
@@ -2489,25 +2619,43 @@ dialog select:focus { border-color: var(--accent); outline: none; }
 
   function dropLift() {
     const list = listById(ui.openListId);
-    const target = lift.target;
-    const parts = target ? partsOf(list, target) : null;
-    const { item, sub, owner, moved } = lift;
-    // The row is about to be re-rendered anyway, but a failed move leaves it in
+    const place = lift.place;
+    const dragged = { item: lift.item, sub: lift.sub, owner: lift.owner };
+    const moved = lift.moved;
+    // The row is about to be re-rendered anyway, but a refused move leaves it in
     // place, so the offset has to go either way.
     lift.row.style.transform = '';
     const dropped = endLift();
     // A hold that never went anywhere is not a move: letting go on the spot must
     // not quietly lift a step out of the thing it belongs to.
     if (!dropped || !moved || !list) return;
+    applyDrop(list, dragged, place);
+  }
 
-    if (sub) {
-      // A step dropped on nothing is a step asking to stand on its own.
-      if (!parts) promoteSubToItem(list, owner, sub);
-      else if (parts.item !== owner) moveSubUnder(list, owner, sub, parts.item);
+  function applyDrop(list, dragged, place) {
+    const { item, sub, owner } = dragged;
+
+    if (!place) {
+      // Off the rows entirely: a step asking to stand on its own.
+      if (sub) promoteSubToItem(list, owner, sub);
       return;
     }
-    // Dropping on a step means dropping on the thing that owns it.
-    if (parts && parts.item !== item) nestItemUnder(list, item, parts.item);
+
+    if (place.mode === 'into') {
+      if (sub) moveSubUnder(list, owner, sub, place.parts.item);
+      else nestItemUnder(list, item, place.parts.item);
+      return;
+    }
+
+    // Beside a row, which means at that row's level.
+    const after = place.mode === 'after';
+    if (place.parts.sub) {
+      if (sub) reorderSub(list, owner, sub, place.parts.owner, place.parts.sub, after);
+      else nestItemBeside(list, item, place.parts.owner, place.parts.sub, after);
+      return;
+    }
+    if (sub) promoteSubBeside(list, owner, sub, place.parts.item, after);
+    else reorderItemBeside(list, item, place.parts.item, after);
   }
 
   document.addEventListener('pointerup', (e) => {
@@ -2527,29 +2675,52 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   });
 
   /**
-   * The same two moves without the gesture, because a drag is unreachable from a
-   * keyboard or a screen reader. Ctrl/⌘ with an arrow, on any control in the row.
+   * Every move the drag can make, without the drag — it is unreachable from a
+   * keyboard or a screen reader. Ctrl/⌘ and an arrow, from any control in the
+   * row: up and down reorder, right files it under the thing above, left lifts
+   * it back out. Both modifiers are taken because each platform reserves one of
+   * them for something else.
    */
+  const ROW_MOVES = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'out', ArrowRight: 'in' };
+
   $('screenList').addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-    if (e.key !== 'ArrowUp' && e.key !== 'ArrowLeft') return;
+    const move = ROW_MOVES[e.key];
+    if (!move) return;
     const list = listById(ui.openListId);
     if (!list) return;
-    const row = e.target.closest('.item, .subs li');
-    const parts = partsOf(list, row);
+    const parts = partsOf(list, e.target.closest('.item, .subs li'));
     if (!parts) return;
 
-    if (parts.sub) {
-      if (e.key !== 'ArrowLeft') return;
+    const row = parts.sub
+      ? e.target.closest('.subs li')
+      : e.target.closest('.item');
+    // The neighbour on screen, not in the array: finished things sit in their
+    // own pile, so the two orders are not the same.
+    const beside = partsOf(list, move === 'up' || move === 'in'
+      ? row.previousElementSibling
+      : row.nextElementSibling);
+
+    if (move === 'up' || move === 'down') {
+      if (!beside) return;
       e.preventDefault();
-      promoteSubToItem(list, parts.owner, parts.sub);
+      const after = move === 'down';
+      if (parts.sub) reorderSub(list, parts.owner, parts.sub, beside.owner, beside.sub, after);
+      else reorderItemBeside(list, parts.item, beside.item, after);
       return;
     }
-    if (e.key !== 'ArrowUp') return;
-    const above = partsOf(list, row.previousElementSibling);
-    if (!above) return;
+
+    if (move === 'in') {
+      // Only a whole thing can be filed under another; a step is already in one.
+      if (parts.sub || !beside || beside.sub) return;
+      e.preventDefault();
+      nestItemUnder(list, parts.item, beside.item);
+      return;
+    }
+
+    if (!parts.sub) return;
     e.preventDefault();
-    nestItemUnder(list, parts.item, above.item);
+    promoteSubToItem(list, parts.owner, parts.sub);
   });
 
   /**

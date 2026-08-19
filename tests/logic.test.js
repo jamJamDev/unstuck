@@ -898,7 +898,7 @@ test('a step promoted stands on its own, right after what it came from', () => {
   const pile = l.items[0];
   pile.subs = [L.newSub('Hoover')];
 
-  assert.equal(L.promoteSub(l, pile, pile.subs[0], 5000), true);
+  assert.equal(L.promoteSub(l, pile, pile.subs[0], 5000).text, 'Hoover', 'it hands back what it made');
   assert.deepEqual(l.items.map((i) => i.text), ['Sort the pile', 'Hoover', 'Wash up']);
   assert.deepEqual(pile.subs, []);
   assert.deepEqual(l.items[1].subs, [], 'it arrives as an ordinary item');
@@ -936,6 +936,92 @@ test('nesting the last unfinished thing under a done one reopens it', () => {
   L.syncFromSubs(l, pile, 9000);
   assert.equal(pile.done, false, 'an unfinished step means an unfinished thing');
   assert.equal(L.pickableCount(l), 1);
+});
+
+test('a thing can be moved before or after another', () => {
+  const l = list('House', 'once', ['a', 'b', 'c', 'd']);
+  const [a, b, c] = l.items;
+
+  assert.equal(L.moveItemBeside(l, a, c, true), true);
+  assert.deepEqual(l.items.map((i) => i.text), ['b', 'c', 'a', 'd']);
+
+  assert.equal(L.moveItemBeside(l, a, b, false), true);
+  assert.deepEqual(l.items.map((i) => i.text), ['a', 'b', 'c', 'd'], 'and straight back again');
+});
+
+test('moving a thing next to itself, or next to a stranger, does nothing', () => {
+  const l = list('House', 'once', ['a', 'b']);
+  const stranger = item('elsewhere');
+  assert.equal(L.moveItemBeside(l, l.items[0], l.items[0], true), false);
+  assert.equal(L.moveItemBeside(l, l.items[0], stranger, true), false);
+  assert.deepEqual(l.items.map((i) => i.text), ['a', 'b']);
+});
+
+test('reordering reaches past what is on screen', () => {
+  // The screen splits a list into open and done piles, so a move is expressed
+  // against a neighbour: the array order and the on-screen order are not equal.
+  const l = list('House', 'once', [item('a'), item('b', { done: true }), item('c')]);
+  L.moveItemBeside(l, l.items[2], l.items[0], false);
+  assert.deepEqual(l.items.map((i) => i.text), ['c', 'a', 'b'], 'the done one in between is no obstacle');
+});
+
+test('a step can be reordered within its own thing', () => {
+  const l = list('House', 'once', ['Sort the pile']);
+  const pile = l.items[0];
+  pile.subs = [L.newSub('one'), L.newSub('two'), L.newSub('three')];
+
+  assert.equal(L.moveSubBeside(pile, pile.subs[2], pile, pile.subs[0], false), true);
+  assert.deepEqual(pile.subs.map((s) => s.text), ['three', 'one', 'two']);
+});
+
+test('a step can be dropped in at a chosen place under a different thing', () => {
+  const l = list('House', 'once', ['Sort the pile', 'Tidy the desk']);
+  const [pile, desk] = l.items;
+  pile.subs = [L.newSub('hoover')];
+  desk.subs = [L.newSub('papers'), L.newSub('cables')];
+
+  assert.equal(L.moveSubBeside(pile, pile.subs[0], desk, desk.subs[1], false), true);
+  assert.deepEqual(pile.subs, []);
+  assert.deepEqual(desk.subs.map((s) => s.text), ['papers', 'hoover', 'cables']);
+});
+
+test('a step cannot be moved next to itself', () => {
+  const l = list('House', 'once', ['Sort the pile']);
+  const pile = l.items[0];
+  pile.subs = [L.newSub('one'), L.newSub('two')];
+  assert.equal(L.moveSubBeside(pile, pile.subs[0], pile, pile.subs[0], true), false);
+  assert.deepEqual(pile.subs.map((s) => s.text), ['one', 'two']);
+});
+
+test('a thing nested at a place lands there, steps and all', () => {
+  const l = list('House', 'once', ['Sort the pile', 'Tidy the desk']);
+  const [pile, desk] = l.items;
+  pile.subs = [L.newSub('one'), L.newSub('two')];
+  desk.subs = [L.newSub('papers')];
+
+  assert.equal(L.nestItem(l, desk, pile, 1), true);
+  assert.deepEqual(pile.subs.map((s) => s.text), ['one', 'Tidy the desk', 'papers', 'two']);
+});
+
+test('an out-of-range nesting index is clamped, not obeyed', () => {
+  const l = list('House', 'once', ['Sort the pile', 'Hoover']);
+  L.nestItem(l, l.items[1], l.items[0], 99);
+  assert.deepEqual(l.items[0].subs.map((s) => s.text), ['Hoover']);
+});
+
+test('reordering never changes what is pickable', () => {
+  const l = list('House', 'once', ['a', 'b', 'c']);
+  const before = L.pickableCount(l);
+  L.moveItemBeside(l, l.items[0], l.items[2], true);
+  assert.equal(L.pickableCount(l), before);
+  assert.deepEqual(l.items.map((i) => i.done), [false, false, false]);
+});
+
+test('an ongoing list reorders exactly like any other', () => {
+  const l = list('Practice', 'endless', [item('guitar', { count: 4 }), item('spanish'), item('drawing')]);
+  L.moveItemBeside(l, l.items[2], l.items[0], false);
+  assert.deepEqual(l.items.map((i) => i.text), ['drawing', 'guitar', 'spanish']);
+  assert.equal(l.items[1].count, 4, 'a tally must not care where its thing sits');
 });
 
 // ------------------------------------------------------------------ shape

@@ -616,11 +616,16 @@
     await sleep(700);
 
     assert(main.scrollTop > 0, 'holding at the edge must bring the list up');
-    const target = app.doc.querySelector('#openItems .item.drop-into .text');
-    assert(target, 'a row scrolled into reach must still be a drop target');
-    const name = target.textContent;
+    const marked = app.doc.querySelector('#openItems .item.drop-into, #openItems .item.drop-before, #openItems .item.drop-after');
+    assert(marked, 'a row scrolled into reach must still be a drop target');
 
-    app.doc.dispatchEvent(new app.win.PointerEvent('pointerup', at(edge)));
+    // Aim at the middle of whatever came up, so the drop is a nesting one.
+    const middle = centreOf(marked.querySelector('.text'));
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointermove', at(middle)));
+    const name = marked.querySelector('.text').textContent;
+    equal(marked.classList.contains('drop-into'), true, 'the middle of a row files into it');
+
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointerup', at(middle)));
     await waitFor(() => stored().lists[0].items.length === 19, 'the drop');
     const owner = stored().lists[0].items.find((i) => i.subs.length);
     equal(owner.text, name, 'it must land on the row that was highlighted');
@@ -645,13 +650,127 @@
       new app.win.KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true, cancelable: true })
     );
 
-    key(app.doc.querySelectorAll('#openItems .item')[1], 'ArrowUp');
+    key(app.doc.querySelectorAll('#openItems .item')[1], 'ArrowRight');
     await waitFor(() => stored().lists[0].items.length === 1, 'the nest');
     equal(stored().lists[0].items[0].subs[0].text, 'Hoover');
 
     key(app.doc.querySelector('#openItems .subs li'), 'ArrowLeft');
     await waitFor(() => stored().lists[0].items.length === 2, 'the unnest');
     equal(stored().lists[0].items[1].text, 'Hoover');
+  });
+
+  test('the keyboard reorders both things and steps', async () => {
+    const list = listOf('once', 'House', ['a', 'b', 'c']);
+    list.items[0].subs = [{ id: 's1', text: 'one', done: false }, { id: 's2', text: 'two', done: false }];
+    const app = await openTheList(await boot(stateOf([list])));
+    const key = (el, k) => el.dispatchEvent(
+      new app.win.KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true, cancelable: true })
+    );
+    const order = () => stored().lists[0].items.map((i) => i.text).join(',');
+
+    key(app.doc.querySelectorAll('#openItems .item')[2], 'ArrowUp');
+    await waitFor(() => order() === 'a,c,b', 'the thing to move up');
+
+    key(app.doc.querySelectorAll('#openItems .subs li')[1], 'ArrowUp');
+    await waitFor(() => stored().lists[0].items[0].subs.map((s) => s.text).join(',') === 'two,one', 'the step to move up');
+
+    key(app.doc.querySelectorAll('#openItems .item')[0], 'ArrowDown');
+    await waitFor(() => order() === 'c,a,b', 'the thing to move down');
+  });
+
+  test('the top of a row inserts above it, the middle files into it', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['a', 'b', 'c'])])));
+    const rows = () => app.doc.querySelectorAll('#openItems .item');
+    const order = () => stored().lists[0].items.map((i) => i.text).join(',');
+
+    // Aimed at the top edge of "a", the last row goes above it rather than into it.
+    const target = rows()[0];
+    const box = target.getBoundingClientRect();
+    await dragRow(app, rows()[2], { x: box.left + box.width / 2, y: box.top + 3 });
+
+    await waitFor(() => order() === 'c,a,b', 'the reorder');
+    equal(stored().lists[0].items.every((i) => i.subs.length === 0), true, 'an edge drop must not nest');
+  });
+
+  test('the bottom edge of a row inserts below it', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['a', 'b', 'c'])])));
+    const rows = () => app.doc.querySelectorAll('#openItems .item');
+    const order = () => stored().lists[0].items.map((i) => i.text).join(',');
+
+    const target = rows()[2];
+    const box = target.getBoundingClientRect();
+    await dragRow(app, rows()[0], { x: box.left + box.width / 2, y: box.bottom - 3 });
+
+    await waitFor(() => order() === 'b,c,a', 'the reorder');
+  });
+
+  test('an ongoing list reorders the same way, tallies intact', async () => {
+    const list = listOf('endless', 'Practice', ['guitar', 'spanish', 'drawing']);
+    list.items[0].count = 4;
+    list.items[0].lastDone = 1700000000000;
+    const app = await openTheList(await boot(stateOf([list])));
+
+    const rows = () => app.doc.querySelectorAll('#openItems .item');
+    const box = rows()[0].getBoundingClientRect();
+    await dragRow(app, rows()[2], { x: box.left + box.width / 2, y: box.top + 3 });
+
+    await waitFor(() => stored().lists[0].items.map((i) => i.text).join(',') === 'drawing,guitar,spanish', 'the reorder');
+    equal(stored().lists[0].items[1].count, 4, 'a tally must survive the move');
+    equal(app.doc.querySelectorAll('#openItems .tally')[1].textContent, '4×');
+  });
+
+  test('a reorder can be undone', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['a', 'b', 'c'])])));
+    const rows = () => app.doc.querySelectorAll('#openItems .item');
+    const box = rows()[0].getBoundingClientRect();
+    await dragRow(app, rows()[2], { x: box.left + box.width / 2, y: box.top + 3 });
+    await waitFor(() => stored().lists[0].items.map((i) => i.text).join(',') === 'c,a,b', 'the reorder');
+
+    app.$('toastAction').click();
+    await waitFor(() => stored().lists[0].items.map((i) => i.text).join(',') === 'a,b,c', 'the undo');
+  });
+
+  test('a step dropped on the edge of another lands beside it, still a step', async () => {
+    const list = listOf('once', 'House', ['Sort the pile']);
+    list.items[0].subs = [
+      { id: 's1', text: 'one', done: false },
+      { id: 's2', text: 'two', done: false },
+      { id: 's3', text: 'three', done: false },
+    ];
+    const app = await openTheList(await boot(stateOf([list])));
+
+    const subs = () => app.doc.querySelectorAll('#openItems .subs li');
+    const box = subs()[0].getBoundingClientRect();
+    await dragRow(app, subs()[2], { x: box.left + box.width / 2, y: box.top + 2 });
+
+    await waitFor(() => stored().lists[0].items[0].subs.map((s) => s.text).join(',') === 'three,one,two', 'the reorder');
+    equal(stored().lists[0].items.length, 1, 'it must stay a step');
+  });
+
+  test('the drop line says which of the two a drop would do', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['a', 'b'])])));
+    const rows = app.doc.querySelectorAll('#openItems .item');
+    const start = centreOf(rows[1]);
+    const box = rows[0].getBoundingClientRect();
+    const at = (p) => ({ bubbles: true, pointerId: 1, clientX: p.x, clientY: p.y });
+
+    rows[1].dispatchEvent(new app.win.PointerEvent('pointerdown', at(start)));
+    await sleep(600);
+    equal(rows[1].classList.contains('lifted'), true, 'a held row has to say it is loose');
+
+    const mid = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointermove', at(mid)));
+    equal(rows[0].classList.contains('drop-into'), true, 'the middle files it in');
+
+    const top = { x: mid.x, y: box.top + 2 };
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointermove', at(top)));
+    equal(rows[0].classList.contains('drop-before'), true, 'the top edge puts it above');
+    equal(rows[0].classList.contains('drop-into'), false, 'and only one of the two may be on offer');
+
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointerup', at(top)));
+    await sleep(50);
+    equal(app.doc.querySelectorAll('.drop-into, .drop-before, .drop-after, .lifted').length, 0,
+      'every mark must be cleared on release');
   });
 
   test('the swipe verdicts stand outside the card, so they hold still as it moves', async () => {
