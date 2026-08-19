@@ -25,7 +25,7 @@ the browser only — for a real "Add to Home Screen" install, host the folder on
 Netlify.
 
 **Editing gotcha:** `sw.js` is network-first, but browsers still cache aggressively. After an edit,
-hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v8`), or load with a `?v=N`
+hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v9`), or load with a `?v=N`
 cache-buster. If a change seems not to apply, this is almost always why.
 
 ## Layout
@@ -62,12 +62,12 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (111 checks, `node --test`, zero dependencies) — validation and coercion
+- **`tests/logic.test.js`** (114 checks, `node --test`, zero dependencies) — validation and coercion
   in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
   selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
   directions, every nest / move / promote / reorder, and the pick algorithm with an injected RNG so
   every branch is deterministic.
-- **`tests/dom.test.html`** (82 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/dom.test.html`** (85 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was checked, that a kind change keeps every item, that the two display switches are
@@ -227,7 +227,24 @@ Settings (the gear) carries:
   two override it, and both the riffle and the card fly-out obey the result.
 - **Read the pick aloud** — speaks the pick through `speechSynthesis`, so you can hit the button and
   hear the answer without looking.
-- **Higher contrast** — brightens the muted secondary text and strengthens borders.
+- **Contrast** — Match phone / Normal / Higher. Higher brightens the muted secondary text and
+  strengthens borders; "Match phone" follows `prefers-contrast: more` and re-resolves if the phone's
+  setting changes while the app is open. The stylesheet only ever sees `high` or `normal`, because a
+  third state in CSS would mean a second code path for the same two palettes.
+
+Two things are enforced rather than offered, since an option nobody finds is not accessibility:
+
+- **A list colour that cannot be read is lifted where it is text.** The colour wheel's brightness
+  slider reaches black, and the list's colour is also the pick card's list name. `readableOn()` raises
+  brightness — then, if that is not enough, washes out saturation — until the colour clears 4.5:1
+  against the card, and paints that as `--list-ink`. The chosen colour still draws the card's edge and
+  its dot, so the choice survives; only the text reading of it moves. The eight palette colours are
+  unit-tested against the same floor, read straight out of the stylesheet, so a new swatch too dark to
+  read fails the suite rather than someone's eyes.
+- **Every control in a list row clears the 24x24 WCAG 2.2 target floor.** The rows are dense on
+  purpose, so the buttons stay visually small while their touch targets grow into the row's own
+  padding and the gaps beside them — never across into a neighbour, so a thumb aimed at the tick
+  cannot land on the label.
 
 Not built on purpose: **voice-to-text**. Android's keyboard mic already dictates into every field
 here, and the Web Speech API is Chrome-only and sends audio off-device. Reimplementing it would be

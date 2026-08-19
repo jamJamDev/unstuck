@@ -196,7 +196,8 @@ main {
 }
 
 .chip {
-  min-height: 36px;
+  /* The app's own tap floor: these are the most-pressed controls on the screen. */
+  min-height: var(--tap);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -283,7 +284,8 @@ main {
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: var(--list-color, var(--accent));
+  /* Text, so it reads the legible version of the list's colour, not the raw one. */
+  color: var(--list-ink, var(--list-color, var(--accent)));
 }
 .card .from .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
 
@@ -601,7 +603,8 @@ main {
   gap: 2px;
 }
 .subs li { display: flex; align-items: center; gap: 8px; position: relative; }
-.subs .check { width: 22px; height: 22px; border-radius: 7px; font-size: 0.75rem; }
+/* 24px is the floor WCAG 2.2 sets for a target; a step's box was under it. */
+.subs .check { width: 24px; height: 24px; border-radius: 7px; font-size: 0.75rem; }
 .subs .text { font-size: 0.9375rem; padding: 4px 2px; }
 .subs .kill { min-width: 28px; min-height: 28px; font-size: 0.9375rem; }
 .subs li.checked .text { color: var(--muted); text-decoration: line-through; }
@@ -696,6 +699,22 @@ main {
   line-height: 1;
 }
 .item .addsub:hover { color: var(--text); background: var(--surface-2); }
+
+/* A row is dense on purpose, so the buttons stay small while their touch targets
+   grow into the row's padding and the gaps beside them. The reach never crosses
+   into a neighbour, so a thumb aimed at one control cannot land on another. */
+.item > .check, .item .addsub, .item .kill, .subs .check, .subs .kill { position: relative; }
+.item > .check::after, .item .addsub::after, .item .kill::after,
+.subs .check::after, .subs .kill::after {
+  content: '';
+  position: absolute;
+  inset: -7px -5px;
+}
+.item > .check::after { inset: -7px -5px -7px -6px; }
+.item .kill::after { inset: -6px -8px -6px -5px; }
+/* A step's row is shorter than an item's: reaching a full 44px here would spill
+   onto the step above and below it. */
+.subs .check::after, .subs .kill::after { inset: -4px -5px; }
 
 .check {
   width: 30px; height: 30px;
@@ -854,28 +873,13 @@ dialog .dlg-actions {
   /* The dialog body scrolls, so keep the actions reachable without hunting. */
   position: sticky;
   bottom: -20px;
-  padding: 12px 0;
+  padding: 22px 0 12px;
   margin-bottom: -20px;
-  background: linear-gradient(to top, var(--surface) 78%, transparent);
+  /* Content scrolls under this, so the fade has to be long enough to read as one
+     rather than as a line drawn across whatever sits behind it. */
+  background: linear-gradient(to top, var(--surface) 58%, transparent);
   box-shadow: 0 -12px 16px -12px rgba(0, 0, 0, 0.9);
 }
-
-.kind-picker { display: flex; flex-direction: column; gap: 8px; }
-.kind-opt {
-  display: flex;
-  gap: 11px;
-  align-items: flex-start;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-2);
-  cursor: pointer;
-}
-.kind-opt input { margin: 3px 0 0; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
-.kind-opt strong { display: block; font-size: 0.9375rem; }
-.kind-opt small { color: var(--muted); font-size: 0.8125rem; }
-.kind-opt:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
-.kind-opt:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 .field-note {
   margin: 10px 0 0;
@@ -1605,20 +1609,23 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       <p class="seg-note">"Match phone" follows your device's reduce-motion setting.</p>
     </div>
 
+    <div class="field">
+      <span>Contrast</span>
+      <div class="segmented" role="radiogroup" aria-label="Contrast">
+        <label><input type="radio" name="contrast" value="auto" checked><span>Match phone</span></label>
+        <label><input type="radio" name="contrast" value="normal"><span>Normal</span></label>
+        <label><input type="radio" name="contrast" value="high"><span>Higher</span></label>
+      </div>
+      <p class="seg-note">Higher brightens the secondary text and strengthens borders.
+        "Match phone" follows your device's contrast setting.</p>
+    </div>
+
     <label class="switch-row">
       <span>
         <strong>Read the pick aloud</strong>
         <small>Speaks what it picked, so you can hear it without looking.</small>
       </span>
       <input type="checkbox" id="speakToggle">
-    </label>
-
-    <label class="switch-row">
-      <span>
-        <strong>Higher contrast</strong>
-        <small>Brightens the secondary text and strengthens borders.</small>
-      </span>
-      <input type="checkbox" id="contrastToggle">
     </label>
 
     <div class="dlg-actions" style="flex-direction: column; margin-top: 18px;">
@@ -1668,7 +1675,13 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     pickableCount, plural, relativeDay, listSummary,
   } = L;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const moreContrast = window.matchMedia('(prefers-contrast: more)');
   const coarsePointer = window.matchMedia('(pointer: coarse)');
+
+  // The card surface in the higher-contrast palette: the lighter of the two, so a
+  // colour that clears the floor against it clears it against the darker one too.
+  const SURFACE_HEX = '#1d222b';
+  const TEXT_CONTRAST = 4.5;
 
   const swipeHintText = () => coarsePointer.matches
     ? 'Swipe left to skip, right to accept'
@@ -1702,9 +1715,14 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     if (L.isCustomColor(safe)) {
       el.className = baseClass;
       el.style.setProperty('--list-color', safe);
+      // The wheel reaches black, and this colour is also used as text. The chosen
+      // colour still paints the borders and dots; only the text reading of it is
+      // lifted, so the choice survives and stays legible.
+      el.style.setProperty('--list-ink', L.readableOn(safe, SURFACE_HEX, TEXT_CONTRAST) || safe);
     } else {
       el.className = baseClass + ' c-' + safe;
       el.style.removeProperty('--list-color');
+      el.style.removeProperty('--list-ink');
     }
   }
 
@@ -1715,8 +1733,17 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     const s = state.settings;
     const root = document.documentElement;
     root.style.setProperty('--text-scale', String(L.TEXT_SCALES[s.textScale] || 1));
-    root.dataset.contrast = s.contrast;
+    // The stylesheet only knows high or not; "match phone" is resolved here so the
+    // phone's own accessibility setting is honoured without a second CSS path.
+    root.dataset.contrast = contrastHigh() ? 'high' : 'normal';
     root.dataset.motion = s.motion;
+  }
+
+  /** True when the stronger palette should be used, by the phone's preference or ours. */
+  function contrastHigh() {
+    if (state.settings.contrast === 'high') return true;
+    if (state.settings.contrast === 'normal') return false;
+    return moreContrast.matches;
   }
 
   /** True when animation should be skipped, by the phone's preference or ours. */
@@ -3950,8 +3977,9 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     if (scale) scale.checked = true;
     const motion = document.querySelector('input[name="motion"][value="' + s.motion + '"]');
     if (motion) motion.checked = true;
+    const contrast = document.querySelector('input[name="contrast"][value="' + s.contrast + '"]');
+    if (contrast) contrast.checked = true;
     $('speakToggle').checked = s.speak;
-    $('contrastToggle').checked = s.contrast === 'high';
   }
 
   function changeSetting(patch) {
@@ -3966,9 +3994,12 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   for (const radio of document.querySelectorAll('input[name="motion"]')) {
     radio.addEventListener('change', (e) => changeSetting({ motion: e.target.value }));
   }
-  $('contrastToggle').addEventListener('change', (e) => {
-    changeSetting({ contrast: e.target.checked ? 'high' : 'normal' });
-  });
+  for (const radio of document.querySelectorAll('input[name="contrast"]')) {
+    radio.addEventListener('change', (e) => changeSetting({ contrast: e.target.value }));
+  }
+  // "Match phone" has to keep matching it: the phone's setting can change while
+  // the app is open, and nothing else would notice.
+  moreContrast.addEventListener('change', () => { if (state.settings.contrast === 'auto') applySettings(); });
   $('speakToggle').addEventListener('change', (e) => {
     changeSetting({ speak: e.target.checked });
     // Say something immediately, so the setting proves itself.

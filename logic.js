@@ -37,13 +37,13 @@ var UnstuckLogic = (() => {
   const MAX_TIMER_MINUTES = 24 * 60;
 
   const TEXT_SCALES = { normal: 1, large: 1.15, larger: 1.3 };
-  const DEFAULT_SETTINGS = { textScale: 'normal', contrast: 'normal', motion: 'auto', speak: false };
+  const DEFAULT_SETTINGS = { textScale: 'normal', contrast: 'auto', motion: 'auto', speak: false };
 
   function normalizeSettings(raw) {
     const s = raw && typeof raw === 'object' ? raw : {};
     return {
       textScale: Object.prototype.hasOwnProperty.call(TEXT_SCALES, s.textScale) ? s.textScale : 'normal',
-      contrast: s.contrast === 'high' ? 'high' : 'normal',
+      contrast: s.contrast === 'high' || s.contrast === 'normal' ? s.contrast : 'auto',
       motion: s.motion === 'reduced' || s.motion === 'full' ? s.motion : 'auto',
       speak: Boolean(s.speak),
     };
@@ -149,6 +149,55 @@ var UnstuckLogic = (() => {
       else h = 60 * ((r - g) / d + 4);
     }
     return { h: ((h % 360) + 360) % 360, s: max === 0 ? 0 : d / max, v: max };
+  }
+
+  /** WCAG relative luminance, the input to every contrast figure below. */
+  function luminance(value) {
+    const hex = normalizeHex(value);
+    if (!hex) return null;
+    const channels = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  }
+
+  /** WCAG contrast between two colours: 1 is invisible, 21 is black on white. */
+  function contrastRatio(a, b) {
+    const la = luminance(a);
+    const lb = luminance(b);
+    if (la === null || lb === null) return null;
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  }
+
+  /**
+   * The same colour, lifted until it can be read as text on `background`.
+   *
+   * A list's colour is chosen on a wheel whose brightness slider reaches black,
+   * and that colour is also used as text — so a legitimate choice can be
+   * invisible. Hue is what the user actually picked, so it never moves:
+   * brightness rises first, then saturation drops, which walks the colour
+   * towards white rather than towards some other colour. Returns the original
+   * when it already passes, and null if it was not a colour at all.
+   */
+  function readableOn(value, background, minRatio) {
+    const hsv = hexToHsv(value);
+    const hex = normalizeHex(value);
+    if (!hsv || !hex || !normalizeHex(background)) return null;
+    const target = minRatio || 4.5;
+    if (contrastRatio(hex, background) >= target) return hex;
+
+    for (let v = hsv.v; v <= 1.0001; v += 0.02) {
+      const lifted = hsvToHex(hsv.h, hsv.s, Math.min(1, v));
+      if (contrastRatio(lifted, background) >= target) return lifted;
+    }
+    for (let s = hsv.s; s >= -0.0001; s -= 0.02) {
+      const washed = hsvToHex(hsv.h, Math.max(0, s), 1);
+      if (contrastRatio(washed, background) >= target) return washed;
+    }
+    // White is the most legible thing there is; if that misses, the background is
+    // the problem, and returning it unchanged would be a silent failure.
+    return '#ffffff';
   }
 
   /**
@@ -616,6 +665,7 @@ var UnstuckLogic = (() => {
     SCHEMA, STORE_KEY, COLORS, KIND_LABEL, HISTORY_LIMIT, STARTER_LISTS,
     uid, emptyState, newItem, newSub, newList, listFromStarter, migrate, resolveKind,
     normalizeHex, normalizeColor, isCustomColor, hsvToHex, hexToHsv,
+    luminance, contrastRatio, readableOn,
     TIMER_PRESETS, TEXT_SCALES, DEFAULT_SETTINGS, normalizeSettings, normalizeTimerMinutes,
     startTimer, timerRemaining, timerFinished, pauseTimer, resumeTimer, extendTimer,
     normalizeTimer, formatClock, formatMinutes, formatMinutesShort,

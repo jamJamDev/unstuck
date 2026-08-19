@@ -331,13 +331,52 @@ test('settings fall back to safe defaults rather than trusting the file', () => 
   assert.deepEqual(L.normalizeSettings(), L.DEFAULT_SETTINGS);
   assert.deepEqual(L.normalizeSettings('nonsense'), L.DEFAULT_SETTINGS);
   assert.deepEqual(L.normalizeSettings({ textScale: 'huge', contrast: 'weird', motion: 'spin', speak: 'yes' }), {
-    textScale: 'normal', contrast: 'normal', motion: 'auto', speak: true,
+    textScale: 'normal', contrast: 'auto', motion: 'auto', speak: true,
   });
 });
 
 test('settings that are valid are kept as they are', () => {
   const wanted = { textScale: 'larger', contrast: 'high', motion: 'reduced', speak: true };
   assert.deepEqual(L.normalizeSettings(wanted), wanted);
+  // Contrast follows the phone by default, and says so rather than guessing normal.
+  assert.equal(L.normalizeSettings({ contrast: 'auto' }).contrast, 'auto');
+  assert.equal(L.normalizeSettings({ contrast: 'normal' }).contrast, 'normal');
+});
+
+test('contrast maths match the WCAG figures they claim to be', () => {
+  assert.equal(Math.round(L.contrastRatio('#ffffff', '#000000')), 21, 'the extremes');
+  assert.equal(L.contrastRatio('#123456', '#123456'), 1, 'a colour against itself is invisible');
+  assert.equal(L.luminance('#ffffff'), 1);
+  assert.equal(L.luminance('#000000'), 0);
+  assert.equal(L.contrastRatio('#ffffff', 'not a colour'), null, 'refused, not guessed');
+});
+
+test('a list colour too dark to read is lifted, keeping its hue', () => {
+  const surface = '#1d222b';
+  // The colour wheel's brightness slider reaches black, and the colour is used as
+  // text: this is the case that put an unreadable label on the pick card.
+  const lifted = L.readableOn('#101010', surface, 4.5);
+  assert.ok(L.contrastRatio(lifted, surface) >= 4.5, 'got ' + L.contrastRatio(lifted, surface));
+
+  const dark = L.readableOn('#3a0d0d', surface, 4.5);
+  assert.ok(L.contrastRatio(dark, surface) >= 4.5);
+  assert.equal(Math.round(L.hexToHsv(dark).h), Math.round(L.hexToHsv('#3a0d0d').h), 'the hue is what was chosen');
+
+  const fine = '#5cb8f5';
+  assert.equal(L.readableOn(fine, surface, 4.5), fine, 'a colour that already reads is left alone');
+  assert.equal(L.readableOn('nope', surface, 4.5), null, 'refused, not guessed');
+});
+
+test('every palette colour is already legible on a card', () => {
+  // The palette lives in the stylesheet, so this reads it there: a new swatch too
+  // dark to read as text would otherwise only show up on someone's phone.
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../index.html'), 'utf8');
+  for (const name of L.COLORS) {
+    const match = css.match(new RegExp('\\.c-' + name + '\\s*{\\s*--list-color:\\s*(#[0-9a-f]{6})'));
+    assert.ok(match, name + ' must be defined in the stylesheet');
+    assert.ok(L.contrastRatio(match[1], '#1d222b') >= 4.5,
+      name + ' reads at ' + L.contrastRatio(match[1], '#1d222b').toFixed(2) + ' on a card');
+  }
 });
 
 test('every text scale is a real multiplier', () => {

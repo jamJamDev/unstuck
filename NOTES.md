@@ -6,40 +6,27 @@ this is state and direction only.
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-111 unit checks (`./test.sh`) and 82 browser checks (`./test.sh --browser`) passing.
+114 unit checks (`./test.sh`) and 85 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
 switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
 settings.
 
-**Uncommitted:** a **tip jar** row at the foot of Settings, linking out to Ko-fi. Chosen over ads and
-over a paid timer: ads would land in the one moment the app exists for, and the timer is core to
-time-boxing, so charging for it reads as "why isn't that free". A tip unlocks nothing, so nobody is
-frustrated. Deliberately a plain link, never Ko-fi's widget script — an embedded third party would
-end the "nothing leaves the device" promise and break offline.
+**Uncommitted:** an accessibility round — a legibility floor for custom list colours, 24px-minimum
+touch targets in list rows, "Match phone" for contrast, and the dead CSS from the old kind picker
+removed.
 
-Shipped in bd56ae2: the timer offer gained a **Custom** chip — a typed length for anything the four
-presets do not cover, refused loudly rather than started when it is not a number of minutes. Never
-mind moved to the foot of the offer, under the lengths. "Time it?" is gone from the standalone ask,
-where the card headline already asks "How long?", and kept on the accepted card, which is busy
-saying something else. `1 hour` reads `1 hr` on a chip to make room; five chips still wrap to two
-rows on a 360px phone, which is fine — Custom reading as its own row is honest.
+The week-of-use round before it (`88bf31f`..`db0ec62`) landed drag-to-reorder alongside
+drag-to-nest, an escape from the standalone timer ask, a Custom timer length, and the Ko-fi tip jar.
+Git holds the detail; two lessons from it are worth keeping here:
 
-Shipped in 9409a6f: "Set a timer" on the Decide screen had no way out — it borrowed the pick card to
-ask a length, and hid every button on it, so a user who did not want a timer after all was stuck on
-that screen.
-
-Shipped in 88bf31f: the drag now reorders as well as nests — the middle of a row files the dragged thing
-in, either edge drops it there with a coloured line showing where, on every kind of list. The lifted
-row wobbles and the phone buzzes twice so it is obvious it has been picked up. Ctrl/⌘ with the four
-arrows does the same from a keyboard.
-
-The nesting drag did not work on a real phone in the round before this: the non-passive `touchmove`
-listener that stops the list scrolling was registered when the row lifted, half a second into the
-touch, but a browser fixes whether a touch may scroll as it *starts* and counts only the blocking
-listeners already present. It is registered at startup now. Neither suite caught it — synthetic
-pointer events and CDP touch both bypass that decision entirely, so it is a hand-test-only class of
-bug on this surface.
+- **A touch listener registered late is a listener that does nothing.** The nesting drag failed on a
+  real phone because the non-passive `touchmove` that stops the list scrolling was registered when
+  the row lifted, half a second in — but a browser fixes whether a touch may scroll as the touch
+  *starts*, counting only the blocking listeners already present. Registered at startup now.
+- **Neither suite can catch that class of bug.** Synthetic pointer events and CDP touch both bypass
+  the scroll decision entirely, so it took a phone in a hand. Assume the same of anything else that
+  depends on how a browser interprets a *gesture* rather than an event.
 
 The repo is **public**, which it had to be — GitHub Pages will not serve a private repo on the free
 plan. Only the code is public; lists live in each device's storage and never leave it.
@@ -99,12 +86,14 @@ plan. Only the code is public; lists live in each device's storage and never lea
   go: the middle files in, either edge inserts. Two gestures for one finger would have been the
   worse answer. Order still means nothing to the picker on any kind of list — it is uniform random
   regardless — but it makes a long list readable, which is why it earns the gesture.
-
 - **Free, no ads, nothing paywalled — a tip jar instead.** An ad would sit in the exact moment the
   app exists to smooth over, and would cost the "nothing leaves the device" promise (tracking SDK,
   consent prompt, privacy policy) for a few dollars a month at realistic install numbers. A paid
   timer fails differently: time-boxing is core to getting unstuck, so charging for it reads as
   "why isn't that just free". The tip unlocks nothing on purpose.
+- **A colour is lifted for text, never replaced.** The wheel can produce a colour that cannot be read
+  on the card, and refusing it would make the wheel feel broken. The chosen colour still paints edges
+  and dots; only its text reading is raised to 4.5:1, as `--list-ink`.
 
 ## Ideas, not commitments
 

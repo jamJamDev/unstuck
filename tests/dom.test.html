@@ -1291,14 +1291,69 @@
     scale.dispatchEvent(new app.win.Event('change', { bubbles: true }));
     assert(rootFont() > base, 'text must actually grow, not just record a preference');
 
-    app.$('contrastToggle').checked = true;
-    app.$('contrastToggle').dispatchEvent(new app.win.Event('change', { bubbles: true }));
+    const contrast = app.doc.querySelector('input[name="contrast"][value="high"]');
+    contrast.checked = true;
+    contrast.dispatchEvent(new app.win.Event('change', { bubbles: true }));
     equal(app.doc.documentElement.dataset.contrast, 'high');
 
     await waitFor(() => stored().settings.textScale === 'larger', 'the setting to save');
     const again = await boot(stored());
     equal(again.doc.documentElement.dataset.contrast, 'high', 'reapplied on load');
     assert(parseFloat(again.win.getComputedStyle(again.doc.documentElement).fontSize) > base);
+  });
+
+  test('"match phone" resolves to a real palette rather than a third state', async () => {
+    const state = stateOf([listOf('once', 'Chores', ['Wash up'])]);
+    state.settings = { textScale: 'normal', contrast: 'auto', motion: 'auto', speak: false };
+    const app = await boot(state);
+    // The stylesheet only knows high or not, so "auto" must never reach it.
+    const painted = app.doc.documentElement.dataset.contrast;
+    equal(painted === 'high' || painted === 'normal', true, 'got ' + painted);
+    equal(painted, app.win.matchMedia('(prefers-contrast: more)').matches ? 'high' : 'normal');
+
+    app.$('dataBtn').click();
+    equal(app.doc.querySelector('input[name="contrast"][value="auto"]').checked, true,
+      'the sheet must show what is actually saved');
+  });
+
+  test('a custom colour too dark to read is lifted for text, not for everything', async () => {
+    const list = listOf('once', 'Chores', ['Wash up']);
+    list.color = '#0d0d10';
+    const app = await boot(stateOf([list]));
+    app.$('pickBtn').click();
+    await settled(app);
+
+    const card = app.$('card');
+    const style = app.win.getComputedStyle(card);
+    // The colour the user chose still paints the card's edge...
+    equal(style.getPropertyValue('--list-color').trim(), '#0d0d10');
+    // ...but the list name is text, so it reads the lifted one.
+    const from = app.doc.querySelector('#cardFrom');
+    const ink = app.win.getComputedStyle(from).color;
+    const lum = (c) => { const [r, g, b] = c.match(/\d+/g).slice(0, 3).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const bg = app.win.getComputedStyle(card).backgroundColor;
+    const ratio = (Math.max(lum(ink), lum(bg)) + 0.05) / (Math.min(lum(ink), lum(bg)) + 0.05);
+    assert(ratio >= 4.5, 'the list name reads at ' + ratio.toFixed(2) + ':1 on its own card');
+  });
+
+  test('every row control is at least the 24px a target has to be', async () => {
+    const list = listOf('once', 'Chores', ['Wash up']);
+    list.items[0].subs = [{ id: 's1', text: 'Fill the sink', done: false }];
+    const app = await boot(stateOf([list]));
+    openTheList(app, 0);
+
+    const small = [];
+    for (const el of app.doc.querySelectorAll('#openItems button')) {
+      const box = el.getBoundingClientRect();
+      if (!box.width) continue;
+      // The reach, not the paint: each of these grows into the row's own padding.
+      const after = app.win.getComputedStyle(el, '::after');
+      const grow = (side) => Math.max(0, -parseFloat(after[side] || '0') || 0);
+      const w = box.width + grow('left') + grow('right');
+      const h = box.height + grow('top') + grow('bottom');
+      if (w < 24 || h < 24) small.push(el.className + ' ' + Math.round(w) + 'x' + Math.round(h));
+    }
+    equal(small.join(', '), '', 'these are below the WCAG 2.2 target floor');
   });
 
   test('the tip jar leaves the app safely, and stays at the bottom of Settings', async () => {
