@@ -6,13 +6,18 @@ this is state and direction only.
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-110 unit checks (`./test.sh`) and 75 browser checks (`./test.sh --browser`) passing.
+110 unit checks (`./test.sh`) and 78 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
 switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
 settings.
 
-**Uncommitted:** the drag now reorders as well as nests — the middle of a row files the dragged thing
+**Uncommitted:** "Set a timer" on the Decide screen had no way out — it borrowed the pick card to ask
+a length, and hid every button on it, so a user who did not want a timer after all was stuck on that
+screen. It now carries **Never mind** (Esc on a keyboard), and choosing a length closes it, since the
+running timer bar is the whole answer.
+
+Shipped in 88bf31f: the drag now reorders as well as nests — the middle of a row files the dragged thing
 in, either edge drops it there with a coloured line showing where, on every kind of list. The lifted
 row wobbles and the phone buzzes twice so it is obvious it has been picked up. Ctrl/⌘ with the four
 arrows does the same from a keyboard.

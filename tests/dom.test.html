@@ -1153,6 +1153,45 @@
     equal(app.$('timerLabel').textContent, 'Chores');
   });
 
+  test('the standalone timer ask can be left without starting anything', async () => {
+    // Regression: the ask had no way out at all — no skip, no accept, no dismiss.
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('standaloneTimer').click();
+    await waitFor(() => shown(app.win, app.$('timerOffer')), 'the presets');
+    equal(shown(app.win, app.$('doBtn')), true, 'there must be a way back out');
+    equal(app.$('doBtn').textContent, 'Never mind');
+
+    app.$('doBtn').click();
+    await waitFor(() => !shown(app.win, app.$('card')), 'the card to close');
+    equal(stored().timer, null, 'leaving must not start a timer');
+    equal(shown(app.win, app.$('pickBtn')), true, 'the pick button comes back');
+    equal(shown(app.win, app.$('standaloneTimer')), true, 'and so does the link that opened it');
+  });
+
+  test('Escape closes the standalone timer ask too', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('standaloneTimer').click();
+    await waitFor(() => shown(app.win, app.$('timerOffer')), 'the presets');
+
+    app.$('card').dispatchEvent(new app.win.KeyboardEvent('keydown', {
+      key: 'Escape', bubbles: true, cancelable: true,
+    }));
+    await waitFor(() => !shown(app.win, app.$('card')), 'the card to close');
+    equal(stored().timer, null, 'still nothing started');
+  });
+
+  test('choosing a standalone length starts it and closes the ask', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('standaloneTimer').click();
+    await waitFor(() => shown(app.win, app.$('timerOffer')), 'the presets');
+
+    app.doc.querySelectorAll('#timerPresets button')[1].click();
+    await waitFor(() => shown(app.win, app.$('timerBar')), 'the timer to start');
+    equal(app.$('timerClock').textContent, '30:00');
+    equal(app.$('timerLabel').textContent, 'Timer', 'no list to name, so it is just a timer');
+    equal(shown(app.win, app.$('card')), false, 'the ask has nothing left to say');
+  });
+
   test('a running timer survives a reload and keeps the right time', async () => {
     const state = stateOf([listOf('once', 'Chores', ['Wash up'])]);
     state.timer = { duration: 600000, endsAt: Date.now() + 125000, label: 'Chores', pausedAt: 0 };

@@ -25,7 +25,7 @@ the browser only — for a real "Add to Home Screen" install, host the folder on
 Netlify.
 
 **Editing gotcha:** `sw.js` is network-first, but browsers still cache aggressively. After an edit,
-hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v6`), or load with a `?v=N`
+hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v8`), or load with a `?v=N`
 cache-buster. If a change seems not to apply, this is almost always why.
 
 ## Layout
@@ -67,7 +67,7 @@ Two suites, split by what each can actually reach:
   selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
   directions, every nest / move / promote / reorder, and the pick algorithm with an injected RNG so
   every branch is deterministic.
-- **`tests/dom.test.html`** (75 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/dom.test.html`** (78 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was checked, that a kind change keeps every item, that the two display switches are
@@ -200,7 +200,8 @@ A list can carry a standing timer length (List options → Timer). Accepting a p
 it automatically — no prompt, no duration to choose, because the point of setting one is that you
 already decided. A list without one shows `15 / 30 / 45 / 1 hour` on the accepted card instead, so
 timing it ad hoc costs one tap. "Set a timer" on the Decide screen covers timing something that was
-never a pick.
+never a pick: it borrows the card to ask a length, and carries **Never mind** (or Esc) because not
+wanting one is as valid an answer as any of the four, and a screen you cannot back out of is a trap.
 
 While it runs, a bar above the tab bar shows the countdown with pause, +5 and stop, on every screen
 and within thumb reach.

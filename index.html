@@ -1604,7 +1604,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     tab: 'decide', openListId: null, editingListId: null, actionsListId: null,
     addingSubTo: null, subDraft: '', draftColor: COLORS[0],
   };
-  let session = { shown: new Set(), current: null, settled: false, gen: 0 };
+  let session = { shown: new Set(), current: null, settled: false, gen: 0, timerAsk: false };
   let pendingUndo = null;
   let toastTimer = 0;
 
@@ -1812,7 +1812,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     const showEmptyPool = hasLists && p.length === 0;
     $('poolEmpty').hidden = !showEmptyPool;
 
-    const cardOpen = session.current !== null;
+    const cardOpen = session.current !== null || session.timerAsk;
     $('pickBtn').hidden = !hasLists || showEmptyPool || cardOpen;
     $('card').hidden = !cardOpen;
 
@@ -3303,6 +3303,8 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     $('timerOffer').hidden = true;
     session.current = null;
     session.settled = false;
+    session.timerAsk = false;
+    $('doBtn').textContent = 'I’m doing it';
     // Retires any riffle still in flight, which would otherwise settle onto a closed card.
     session.gen += 1;
     const card = $('card');
@@ -3518,12 +3520,18 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   });
 
   $('doBtn').addEventListener('click', () => {
-    // After accepting, the same button becomes "Pick another".
+    // The same button is "Never mind" while a timer length is being asked for,
+    // and "Pick another" after accepting.
+    if (session.timerAsk) { closeTimerAsk(); return; }
     if (!session.current) { doPick(); return; }
     accept();
   });
 
   $('card').addEventListener('keydown', (e) => {
+    if (session.timerAsk) {
+      if (e.key === 'Escape') { e.preventDefault(); closeTimerAsk(); }
+      return;
+    }
     if (!session.current || !session.settled) return;
     if (e.key === 'ArrowLeft') { e.preventDefault(); doPick(); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); accept(); }
@@ -3659,7 +3667,10 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       b.addEventListener('click', () => {
         askForAlarmPermission();
         startTimerFor(minutes, list ? list.name : '');
-        renderTimerOffer(list);
+        // The standalone ask exists only to collect a length; the running timer
+        // bar is the answer, so the card has nothing left to say.
+        if (session.timerAsk) closeTimerAsk();
+        else renderTimerOffer(list);
       });
       box.appendChild(b);
     }
@@ -3684,22 +3695,35 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     scheduleTimerTick();
   });
 
-  $('standaloneTimer').addEventListener('click', () => {
+  // No pick to time, so this is the one place a length is worth asking for. The
+  // card carries a way back out: a length is a choice, and so is not wanting one.
+  function openTimerAsk() {
+    if (state.timer) return;
     askForAlarmPermission();
-    // No pick to time, so this is the one place a length is worth asking for.
-    const offer = $('timerOffer');
+    session.timerAsk = true;
     renderTimerOffer(null);
-    offer.hidden = false;
-    $('card').hidden = false;
     $('cardFrom').lastElementChild.textContent = 'Timer';
     $('cardWhat').textContent = 'How long?';
     $('cardMeta').textContent = '';
     $('skipBtn').hidden = true;
-    $('doBtn').hidden = true;
-    $('swipeHint').textContent = '';
-    $('pickBtn').hidden = true;
+    $('doBtn').hidden = false;
+    $('doBtn').textContent = 'Never mind';
+    $('swipeHint').textContent = coarsePointer.matches ? '' : 'Or press Esc';
     paintColor($('card'), 'card', COLORS[0]);
-  });
+    renderDecide();
+    $('card').focus({ preventScroll: true });
+  }
+
+  function closeTimerAsk() {
+    closeCard();
+    renderDecide();
+    // Starting a timer hides the link that was just used, so focus falls back to
+    // the pick button rather than landing on nothing.
+    const back = $('standaloneTimer').hidden ? $('pickBtn') : $('standaloneTimer');
+    if (!back.hidden) back.focus({ preventScroll: true });
+  }
+
+  $('standaloneTimer').addEventListener('click', openTimerAsk);
 
   // ---------------------------------------------------------------- swipe
 
