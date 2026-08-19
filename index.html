@@ -577,7 +577,13 @@ main {
   background: var(--surface);
   border: 1px solid transparent;
   border-radius: 12px;
+  /* A row is held to pick it up, which is also how a phone offers to select its
+     text — the selection handles would land on top of the drag. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
+.item input, .subs input { user-select: text; -webkit-user-select: text; }
 .item:hover { border-color: var(--line); }
 
 /* Subtasks hang under their own thing, inside the same row, so a broken-down
@@ -615,6 +621,36 @@ main {
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* Dragging one thing onto another files it as a step. The lifted row follows the
+   finger; the row it is over says so by lighting up. */
+.item.lifted, .subs li.lifted {
+  position: relative;
+  z-index: 3;
+  opacity: 0.9;
+  box-shadow: 0 12px 28px -10px rgba(0,0,0,0.6);
+  cursor: grabbing;
+  /* The pointer is captured by the screen, so the row itself can stay out of the
+     way of the hit test that decides what it is over. */
+  pointer-events: none;
+}
+.item.lifted { background: var(--surface-2); }
+.item.drop-into, .subs li.drop-into {
+  outline: 2px solid var(--list-color, var(--accent));
+  outline-offset: -1px;
+  background: var(--surface-2);
+}
+.drop-out {
+  outline: 2px dashed var(--list-color, var(--accent));
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+/* While something is lifted, nothing underneath should react to the finger. */
+.dragging .item, .dragging .subs li { transition: none; }
+.dragging .item:not(.lifted) *, .dragging .subs li:not(.lifted) * { pointer-events: none; }
+/* The add row is pinned over the bottom of the list, which is exactly where a
+   drag reaches for the rows it scrolled into view. */
+.dragging .add-row, .dragging .tabbar, .dragging .timer-bar { pointer-events: none; }
 
 .item .addsub {
   min-width: 32px; min-height: 32px;
@@ -1971,6 +2007,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     // even though `done` is still carried underneath for the other kinds.
     row.className = 'item' + (item.done && list.kind !== 'endless' ? ' checked' : '');
     row.dataset.item = item.id;
+    row.setAttribute('aria-keyshortcuts', 'Control+ArrowUp');
 
     if (list.kind === 'endless') {
       const tally = document.createElement('button');
@@ -2065,6 +2102,8 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     for (const sub of item.subs) {
       const li = document.createElement('li');
       li.className = sub.done ? 'checked' : '';
+      li.dataset.sub = sub.id;
+      li.setAttribute('aria-keyshortcuts', 'Control+ArrowLeft');
 
       const check = document.createElement('button');
       check.type = 'button';
@@ -2258,6 +2297,272 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     save();
     renderAll();
     toast('Deleted “' + item.text + '”', () => { list.items.splice(at, 0, item); });
+  }
+
+  // ------------------------------------------------------- moving things
+
+  /**
+   * Every move a drag or a keyboard shortcut can make, with one undo shape. The
+   * whole item list plus both owners' step lists are snapshotted rather than the
+   * move inverted: a move touches completion state through `syncFromSubs`, and
+   * putting the exact prior arrangement back cannot get that wrong.
+   */
+  function applyMove(list, run, message) {
+    const before = {
+      items: list.items.slice(),
+      subs: list.items.map((it) => ({ item: it, subs: it.subs.slice(), was: completionOf(it) })),
+    };
+    if (!run()) return false;
+    save();
+    renderAll();
+    toast(message, () => {
+      list.items = before.items;
+      for (const entry of before.subs) {
+        entry.item.subs = entry.subs;
+        restoreCompletion(entry.item, entry.was);
+      }
+    });
+    return true;
+  }
+
+  /** Files a whole item under another as one of its steps. */
+  function nestItemUnder(list, item, parent) {
+    return applyMove(list, () => {
+      if (!L.nestItem(list, item, parent)) return false;
+      syncFromSubs(list, parent);
+      // A thing that was drawn is no longer a thing in its own right.
+      if (session.current && session.current.item.id === item.id) closeCard();
+      return true;
+    }, '“' + item.text + '” is now a step of “' + parent.text + '”');
+  }
+
+  function moveSubUnder(list, from, sub, to) {
+    return applyMove(list, () => {
+      if (!L.moveSub(list, from, sub, to)) return false;
+      syncFromSubs(list, from);
+      syncFromSubs(list, to);
+      return true;
+    }, '“' + sub.text + '” moved to “' + to.text + '”');
+  }
+
+  /** Lifts a step back out to stand on its own. */
+  function promoteSubToItem(list, parent, sub) {
+    return applyMove(list, () => {
+      if (!L.promoteSub(list, parent, sub)) return false;
+      syncFromSubs(list, parent);
+      return true;
+    }, '“' + sub.text + '” is a thing of its own again');
+  }
+
+  // ------------------------------------------------------- the drag gesture
+
+  /**
+   * Hold a row to lift it, then drop it on another to file it there. A held
+   * press rather than an immediate drag because the list scrolls: the gesture
+   * has to declare itself before it can take the finger away from the scroller.
+   */
+  let lift = null;
+
+  const rowAt = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    return el ? el.closest('#screenList .item, #screenList .subs li') : null;
+  };
+
+  /** The item and, for a step, its owner — read from the row's own data. */
+  function partsOf(list, row) {
+    if (!list || !row) return null;
+    const holder = row.closest('.item');
+    if (!holder) return null;
+    const item = list.items.find((it) => it.id === holder.dataset.item);
+    if (!item) return null;
+    if (row === holder) return { item, sub: null, owner: null };
+    const sub = item.subs.find((s) => s.id === row.dataset.sub);
+    return sub ? { item, sub, owner: item } : null;
+  }
+
+  /** Scrolling must not steal a lifted row, and touch scrolling only stops here. */
+  const blockScroll = (e) => { if (lift && lift.active) e.preventDefault(); };
+
+  function beginLift(row) {
+    lift.active = true;
+    lift.row = row;
+    lift.scroller = document.querySelector('main');
+    lift.scrollAt0 = lift.scroller.scrollTop;
+    row.classList.add('lifted');
+    document.body.classList.add('dragging');
+    if (navigator.vibrate) navigator.vibrate(12);
+    lift.scrollTimer = setInterval(edgeScroll, 16);
+  }
+
+  /**
+   * The finger holds still at the edge and the list comes to it — without this a
+   * drag could only reach the rows that happened to be on screen when it started.
+   */
+  const EDGE = 64;
+
+  function edgeScroll() {
+    if (!lift || !lift.active) return;
+    const box = lift.scroller.getBoundingClientRect();
+    let dy = 0;
+    if (lift.y < box.top + EDGE) dy = -Math.ceil((box.top + EDGE - lift.y) / 6);
+    else if (lift.y > box.bottom - EDGE) dy = Math.ceil((lift.y - (box.bottom - EDGE)) / 6);
+    if (!dy) return;
+
+    const before = lift.scroller.scrollTop;
+    lift.scroller.scrollTop = before + dy;
+    if (lift.scroller.scrollTop === before) return;
+    trackLift();
+  }
+
+  /** Keeps the lifted row under the finger and the highlight under both. */
+  function trackLift() {
+    // The row scrolls with its list, so the scroll since it was picked up has to
+    // come back out of the offset or it slides away from the finger.
+    const drift = lift.scroller.scrollTop - lift.scrollAt0;
+    lift.row.style.transform =
+      'translate(' + (lift.x - lift.startX) + 'px,' + (lift.y - lift.startY + drift) + 'px)';
+
+    const row = rowAt(lift.x, lift.y);
+    markTarget(row && row !== lift.row && !lift.row.contains(row) ? row : null);
+  }
+
+  function markTarget(row) {
+    if (lift.target === row) return;
+    if (lift.target) lift.target.classList.remove('drop-into');
+    lift.target = row;
+    if (row) row.classList.add('drop-into');
+    // Letting go over nothing is how a step gets back out, so say so.
+    $('openItems').classList.toggle('drop-out', Boolean(lift.sub) && !row);
+  }
+
+  function endLift() {
+    if (!lift) return;
+    if (lift.timer) clearTimeout(lift.timer);
+    if (lift.scrollTimer) clearInterval(lift.scrollTimer);
+    if (lift.row) lift.row.classList.remove('lifted');
+    if (lift.target) lift.target.classList.remove('drop-into');
+    $('openItems').classList.remove('drop-out');
+    document.body.classList.remove('dragging');
+    document.removeEventListener('touchmove', blockScroll);
+    const wasActive = lift.active;
+    lift = null;
+    return wasActive;
+  }
+
+  $('screenList').addEventListener('pointerdown', (e) => {
+    if (lift || e.button > 0) return;
+    if (e.target.closest('.sub-input, .add-row, .detail-head, .done-head')) return;
+    const row = e.target.closest('.item, .subs li');
+    const parts = partsOf(listById(ui.openListId), row);
+    if (!parts) return;
+
+    lift = {
+      pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
+      x: e.clientX, y: e.clientY,
+      item: parts.item, sub: parts.sub, owner: parts.owner,
+      row: null, target: null, active: false, moved: false,
+      timer: 0, scrollTimer: 0, scroller: null, scrollAt0: 0,
+    };
+    lift.timer = setTimeout(() => {
+      if (!lift) return;
+      lift.timer = 0;
+      beginLift(row);
+      document.addEventListener('touchmove', blockScroll, { passive: false });
+    }, LONG_PRESS_MS);
+  });
+
+  // On the document rather than the row: the row is re-rendered out from under
+  // the gesture, and a drag is allowed to wander outside the list while it looks
+  // for somewhere to land.
+  document.addEventListener('pointermove', (e) => {
+    if (!lift || e.pointerId !== lift.pointerId) return;
+    if (!lift.active) {
+      // Moving before the hold lands means this was a scroll, not a lift.
+      if (Math.abs(e.clientX - lift.startX) > 10 || Math.abs(e.clientY - lift.startY) > 10) endLift();
+      return;
+    }
+    lift.x = e.clientX;
+    lift.y = e.clientY;
+    if (Math.abs(lift.x - lift.startX) > 4 || Math.abs(lift.y - lift.startY) > 4) lift.moved = true;
+    trackLift();
+  });
+
+  function dropLift() {
+    const list = listById(ui.openListId);
+    const target = lift.target;
+    const parts = target ? partsOf(list, target) : null;
+    const { item, sub, owner, moved } = lift;
+    // The row is about to be re-rendered anyway, but a failed move leaves it in
+    // place, so the offset has to go either way.
+    lift.row.style.transform = '';
+    const dropped = endLift();
+    // A hold that never went anywhere is not a move: letting go on the spot must
+    // not quietly lift a step out of the thing it belongs to.
+    if (!dropped || !moved || !list) return;
+
+    if (sub) {
+      // A step dropped on nothing is a step asking to stand on its own.
+      if (!parts) promoteSubToItem(list, owner, sub);
+      else if (parts.item !== owner) moveSubUnder(list, owner, sub, parts.item);
+      return;
+    }
+    // Dropping on a step means dropping on the thing that owns it.
+    if (parts && parts.item !== item) nestItemUnder(list, item, parts.item);
+  }
+
+  document.addEventListener('pointerup', (e) => {
+    if (!lift || e.pointerId !== lift.pointerId) return;
+    if (lift.active) { suppressNextClick(); dropLift(); } else endLift();
+  });
+
+  // Android raises its own menu on a held press, which would cut the lift short.
+  $('screenList').addEventListener('contextmenu', (e) => {
+    if (lift) e.preventDefault();
+  });
+
+  document.addEventListener('pointercancel', (e) => {
+    if (!lift || e.pointerId !== lift.pointerId) return;
+    if (lift.row) lift.row.style.transform = '';
+    endLift();
+  });
+
+  /**
+   * The same two moves without the gesture, because a drag is unreachable from a
+   * keyboard or a screen reader. Ctrl/⌘ with an arrow, on any control in the row.
+   */
+  $('screenList').addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowLeft') return;
+    const list = listById(ui.openListId);
+    if (!list) return;
+    const row = e.target.closest('.item, .subs li');
+    const parts = partsOf(list, row);
+    if (!parts) return;
+
+    if (parts.sub) {
+      if (e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      promoteSubToItem(list, parts.owner, parts.sub);
+      return;
+    }
+    if (e.key !== 'ArrowUp') return;
+    const above = partsOf(list, row.previousElementSibling);
+    if (!above) return;
+    e.preventDefault();
+    nestItemUnder(list, parts.item, above.item);
+  });
+
+  /**
+   * A lift ends on the same tap that would otherwise have opened an editor, so
+   * that one click is swallowed. Scoped to the list screen: the toast this drop
+   * just raised sits outside it, and its Undo has to stay clickable.
+   */
+  function suppressNextClick() {
+    const screen = $('screenList');
+    const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+    screen.addEventListener('click', swallow, { capture: true, once: true });
+    // Nothing follows a touch that ended on a moved finger, so never leave it armed.
+    setTimeout(() => screen.removeEventListener('click', swallow, true), 350);
   }
 
   // --------------------------------------------------------- detail actions

@@ -6,14 +6,14 @@ this is state and direction only.
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-91 unit checks (`./test.sh`) and 59 browser checks (`./test.sh --browser`) passing.
+100 unit checks (`./test.sh`) and 68 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
 switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
 settings.
 
-**Uncommitted:** the week-of-use round — subtasks (schema 3), the list options sheet, and the swipe
-verdicts moved off the card.
+**Uncommitted:** drag-to-nest — hold a row to pick it up, drop it on another to file it as a step,
+drop a step on nothing to lift it back out. Ctrl/⌘ + ↑ and Ctrl/⌘ + ← do the same without a drag.
 
 The repo is **public**, which it had to be — GitHub Pages will not serve a private repo on the free
 plan. Only the code is public; lists live in each device's storage and never leave it.
@@ -44,9 +44,10 @@ plan. Only the code is public; lists live in each device's storage and never lea
   as the moment it ends. A real pocket alarm needs the native wrap — same blocker as the widget.
 - **360x640 screens.** Every field in the edit dialog is on screen at 380x700 and up; on a 360x640
   phone the Timer row needs a small scroll. Fine on anything current.
-- **The drag gesture is not in either suite.** Synthetic pointer events cannot hold a pointer
+- **The captured drags are not in either suite.** Synthetic pointer events cannot hold a pointer
   capture, so swipe-to-skip, swipe-to-accept and the colour wheel drag are verified by hand against
-  a real touch device.
+  a real touch device. Drag-to-nest deliberately does not use pointer capture — it tracks on
+  `document` instead — so that one is covered, including its edge auto-scroll.
 
 ## Settled — do not redecide without a reason
 
@@ -66,6 +67,10 @@ plan. Only the code is public; lists live in each device's storage and never lea
 - **Whole-list actions live in one sheet**, reached by holding a list or by the ⋯ beside its title.
   Nothing that edits a list goes near the row that adds to one: "Edit list" sat above the add row
   and got pressed by a thumb reaching to add an item.
+- **Nesting is one level.** Steps of a moved thing arrive beside it, never underneath. A second
+  level is not a data problem, it is a card problem — the picked card has room for one checklist.
+- **No reordering by drag.** Picking is uniform random, so the order of a list carries no meaning;
+  a reorder gesture would only compete with the nest one for the same finger.
 
 ## Ideas, not commitments
 

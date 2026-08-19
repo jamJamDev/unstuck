@@ -25,7 +25,7 @@ the browser only — for a real "Add to Home Screen" install, host the folder on
 Netlify.
 
 **Editing gotcha:** `sw.js` is network-first, but browsers still cache aggressively. After an edit,
-hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v5`), or load with a `?v=N`
+hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v6`), or load with a `?v=N`
 cache-buster. If a change seems not to apply, this is almost always why.
 
 ## Layout
@@ -62,21 +62,24 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (91 checks, `node --test`, zero dependencies) — validation and coercion
+- **`tests/logic.test.js`** (100 checks, `node --test`, zero dependencies) — validation and coercion
   in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
   selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
-  directions, and the pick algorithm with an injected RNG so every branch is deterministic.
-- **`tests/dom.test.html`** (59 checks) — loads the real app in an iframe with real CSS and real
+  directions, every nest / move / promote, and the pick algorithm with an injected RNG so every
+  branch is deterministic.
+- **`tests/dom.test.html`** (68 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was checked, that a kind change keeps every item, that the two display switches are
   genuinely independent, that a long press opens a list's options while a tap opens the list, that
-  subtasks reach the card and never the pool, that corrupt saved data warns instead of starting
-  silently empty.
+  subtasks reach the card and never the pool, that a held row drags onto another and a held row that
+  never moves changes nothing, that corrupt saved data warns instead of starting silently empty.
 
 Both suites were mutation-checked — the behaviour each one guards was deliberately broken to confirm
-the right test turns red. The one thing neither covers is the **drag gesture**: synthetic pointer
-events cannot hold a pointer capture, so swipe-to-skip and swipe-to-accept are verified by hand.
+the right test turns red. The **card's** swipe is the one gesture neither covers: it needs a real
+pointer capture, which synthetic events cannot hold, so swipe-to-skip and swipe-to-accept are
+verified by hand. The drag on the list screen is covered — it was built without pointer capture, and
+was also driven with real touch input against a running build.
 
 ## Lists: two independent axes
 
@@ -154,6 +157,28 @@ never things in their own right:
 - **Adding one is a burst.** Enter files a step and reopens the field, the way the add row takes
   items. The half-typed text lives in `ui.subDraft`, not the field, so redrawing the list cannot lose
   it — and a blur that a redraw itself caused is ignored rather than treated as leaving the field.
+
+**Rearranging.** Hold a row to pick it up, then drop it:
+
+| Drop | On another thing | On nothing |
+|---|---|---|
+| a thing | becomes one of its steps | stays where it is |
+| a step | moves to that thing | stands on its own again, right after what it came from |
+
+A held press rather than an immediate drag, because the list scrolls — the gesture has to declare
+itself before it can take the finger away from the scroller, and once it has, `touchmove` is
+cancelled so the list stays put under it. Holding at the top or bottom edge scrolls the list to
+the row you are reaching for; the add row and tab bar stop taking the pointer while a drag is live,
+since they sit over exactly the part of the list the scroll just brought into reach.
+
+Nesting is **one level deep** — the picker and the card can only show that much — so steps the moved
+thing already had arrive beside it rather than underneath. A thing keeps its id through the move, so
+nesting and un-nesting is a round trip, not a copy. Every move is one Undo.
+
+A drag is unreachable from a keyboard or a screen reader, so both moves have a shortcut on the
+focused row: **Ctrl/⌘ + ↑** files a thing under the one above it, **Ctrl/⌘ + ←** lifts a step back
+out. Reordering within a level is deliberately not a gesture here — picking is random, so the order
+of a list is not a priority.
 
 ## Timers
 

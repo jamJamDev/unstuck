@@ -490,6 +490,170 @@
     equal(stored().lists[0].items[0].subs[0].text, 'Clothes away');
   });
 
+  // -------------------------------------------------- dragging things about
+
+  const centreOf = (el) => {
+    const b = el.getBoundingClientRect();
+    return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) };
+  };
+
+  /**
+   * Holds a row, drags it to `to` (an element, or a point for "nowhere"), and
+   * lets go. Real pointer coordinates, because the drop target is decided by
+   * what is under the finger, not by what the event was dispatched on.
+   */
+  async function dragRow(app, from, to) {
+    const start = centreOf(from);
+    const end = to && to.nodeType ? centreOf(to) : to;
+    const at = (p) => ({ bubbles: true, pointerId: 1, clientX: p.x, clientY: p.y });
+    from.dispatchEvent(new app.win.PointerEvent('pointerdown', at(start)));
+    await sleep(600);
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointermove', at({ x: start.x, y: start.y + 8 })));
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointermove', at(end)));
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointerup', at(end)));
+    await sleep(50);
+  }
+
+  test('dragging one thing onto another files it as a step', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Sort the pile', 'Hoover'])])));
+    const rows = app.doc.querySelectorAll('#openItems .item');
+    await dragRow(app, rows[1], rows[0]);
+
+    await waitFor(() => stored().lists[0].items.length === 1, 'the move');
+    equal(stored().lists[0].items[0].text, 'Sort the pile');
+    equal(stored().lists[0].items[0].subs[0].text, 'Hoover');
+    equal(app.doc.querySelectorAll('#openItems .subs li').length, 1, 'it must show as a step');
+  });
+
+  test('a dragged thing leaves the pool it was in', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Sort the pile', 'Hoover'])])));
+    const rows = app.doc.querySelectorAll('#openItems .item');
+    await dragRow(app, rows[1], rows[0]);
+    await waitFor(() => stored().lists[0].items.length === 1, 'the move');
+
+    app.$('tabDecide').click();
+    equal(app.doc.querySelector('#chips .chip .count').textContent, '1',
+      'two things became one thing with a step');
+  });
+
+  test('a drag can be undone, arrangement and all', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Sort the pile', 'Hoover'])])));
+    const rows = app.doc.querySelectorAll('#openItems .item');
+    await dragRow(app, rows[1], rows[0]);
+    await waitFor(() => stored().lists[0].items.length === 1, 'the move');
+
+    app.$('toastAction').click();
+    await waitFor(() => stored().lists[0].items.length === 2, 'the undo');
+    equal(stored().lists[0].items.map((i) => i.text).join(','), 'Sort the pile,Hoover', 'the order must come back');
+    equal(stored().lists[0].items[0].subs.length, 0, 'and the step must be taken back off');
+  });
+
+  test('dragging a step off the rows puts it back on its own', async () => {
+    const list = listOf('once', 'House', ['Sort the pile']);
+    list.items[0].subs = [{ id: 's1', text: 'Hoover', done: false }];
+    const app = await openTheList(await boot(stateOf([list])));
+
+    const sub = app.doc.querySelector('#openItems .subs li');
+    // The detail heading is inside the screen but is never a row.
+    await dragRow(app, sub, centreOf(app.$('detailKind')));
+
+    await waitFor(() => stored().lists[0].items.length === 2, 'the promotion');
+    equal(stored().lists[0].items[1].text, 'Hoover');
+    equal(stored().lists[0].items[0].subs.length, 0);
+  });
+
+  test('a step dragged onto another thing changes owner without becoming a thing', async () => {
+    const list = listOf('once', 'House', ['Sort the pile', 'Tidy the desk']);
+    list.items[0].subs = [{ id: 's1', text: 'Hoover', done: false }];
+    const app = await openTheList(await boot(stateOf([list])));
+
+    const sub = app.doc.querySelector('#openItems .subs li');
+    const desk = app.doc.querySelectorAll('#openItems .item')[1];
+    await dragRow(app, sub, desk);
+
+    await waitFor(() => stored().lists[0].items[1].subs.length === 1, 'the move');
+    equal(stored().lists[0].items.length, 2, 'it must not become a thing of its own');
+    equal(stored().lists[0].items[0].subs.length, 0);
+    equal(stored().lists[0].items[1].subs[0].text, 'Hoover');
+  });
+
+  test('holding a step without moving it leaves it exactly where it was', async () => {
+    // Regression: letting go on the spot counted as a drop on nothing, which
+    // quietly lifted the step out of the thing it belonged to.
+    const list = listOf('once', 'House', ['Sort the pile']);
+    list.items[0].subs = [{ id: 's1', text: 'Hoover', done: false }];
+    const app = await openTheList(await boot(stateOf([list])));
+
+    const sub = app.doc.querySelector('#openItems .subs li');
+    const at = centreOf(sub);
+    const opts = { bubbles: true, pointerId: 1, clientX: at.x, clientY: at.y };
+    sub.dispatchEvent(new app.win.PointerEvent('pointerdown', opts));
+    await sleep(600);
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointerup', opts));
+    await sleep(100);
+
+    equal(stored().lists[0].items.length, 1, 'nothing may have moved');
+    equal(stored().lists[0].items[0].subs.length, 1);
+  });
+
+  test('a drag held at the edge scrolls the list and can drop on what it finds', async () => {
+    // Regression: the add row is pinned over the bottom of the list, so it ate
+    // every drop the auto-scroll had just brought into reach.
+    const many = Array.from({ length: 20 }, (_, i) => 'Thing ' + (i + 1));
+    const app = await openTheList(await boot(stateOf([listOf('once', 'Long', many)])));
+    const main = app.doc.querySelector('main');
+    assert(main.scrollHeight > main.clientHeight, 'the list has to be long enough to scroll');
+
+    const first = app.doc.querySelector('#openItems .item');
+    const start = centreOf(first);
+    const edge = { x: start.x, y: main.getBoundingClientRect().bottom - 30 };
+    const at = (p) => ({ bubbles: true, pointerId: 1, clientX: p.x, clientY: p.y });
+
+    first.dispatchEvent(new app.win.PointerEvent('pointerdown', at(start)));
+    await sleep(600);
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointermove', at({ x: start.x, y: start.y + 10 })));
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointermove', at(edge)));
+    await sleep(700);
+
+    assert(main.scrollTop > 0, 'holding at the edge must bring the list up');
+    const target = app.doc.querySelector('#openItems .item.drop-into .text');
+    assert(target, 'a row scrolled into reach must still be a drop target');
+    const name = target.textContent;
+
+    app.doc.dispatchEvent(new app.win.PointerEvent('pointerup', at(edge)));
+    await waitFor(() => stored().lists[0].items.length === 19, 'the drop');
+    const owner = stored().lists[0].items.find((i) => i.subs.length);
+    equal(owner.text, name, 'it must land on the row that was highlighted');
+    equal(owner.subs[0].text, 'Thing 1');
+  });
+
+  test('a quick tap on a row still does what it always did', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Wash up'])])));
+    const check = app.doc.querySelector('#openItems .check');
+    const at = centreOf(check);
+    const opts = { bubbles: true, pointerId: 1, clientX: at.x, clientY: at.y };
+    check.dispatchEvent(new app.win.PointerEvent('pointerdown', opts));
+    check.dispatchEvent(new app.win.PointerEvent('pointerup', opts));
+    check.click();
+
+    await waitFor(() => stored().lists[0].items[0].done, 'the check');
+  });
+
+  test('the keyboard can nest and unnest without a drag', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Sort the pile', 'Hoover'])])));
+    const key = (el, k) => el.dispatchEvent(
+      new app.win.KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true, cancelable: true })
+    );
+
+    key(app.doc.querySelectorAll('#openItems .item')[1], 'ArrowUp');
+    await waitFor(() => stored().lists[0].items.length === 1, 'the nest');
+    equal(stored().lists[0].items[0].subs[0].text, 'Hoover');
+
+    key(app.doc.querySelector('#openItems .subs li'), 'ArrowLeft');
+    await waitFor(() => stored().lists[0].items.length === 2, 'the unnest');
+    equal(stored().lists[0].items[1].text, 'Hoover');
+  });
+
   test('the swipe verdicts stand outside the card, so they hold still as it moves', async () => {
     // Regression: they were inside the card, so they slid off screen with it —
     // unreadable exactly when they were meant to be read.

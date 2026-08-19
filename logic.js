@@ -417,6 +417,56 @@ var UnstuckLogic = (() => {
     return all;
   }
 
+  // ------------------------------------------------- moving things around
+
+  /**
+   * A subtask is the part of an item a step can hold: no tally, no timestamps.
+   * The id travels with it so a thing keeps its identity across the move.
+   */
+  function subFromItem(item) {
+    return { id: item.id, text: item.text, done: Boolean(item.done) };
+  }
+
+  /**
+   * Files a whole item under another as one of its steps. Nesting is one level
+   * deep by design — the picker and the card can only show that much — so steps
+   * the moved item already had arrive beside it rather than underneath.
+   * Returns false when the move is not a real one.
+   */
+  function nestItem(list, item, parent) {
+    const at = list.items.indexOf(item);
+    if (at === -1 || item === parent || !list.items.includes(parent)) return false;
+    list.items.splice(at, 1);
+    parent.subs.push(subFromItem(item), ...item.subs);
+    item.subs = [];
+    return true;
+  }
+
+  /** Hands a step to a different owner, keeping it a step. */
+  function moveSub(list, from, sub, to) {
+    const at = from.subs.indexOf(sub);
+    if (at === -1 || from === to || !list.items.includes(to)) return false;
+    from.subs.splice(at, 1);
+    to.subs.push(sub);
+    return true;
+  }
+
+  /**
+   * Lifts a step back out to stand on its own, directly after what it came from.
+   * A checked step becomes a checked item, which is one completion, so its tally
+   * starts where `setDone` would have put it.
+   */
+  function promoteSub(list, parent, sub, now) {
+    const at = parent.subs.indexOf(sub);
+    if (at === -1) return false;
+    parent.subs.splice(at, 1);
+    const item = newItem(sub.text);
+    item.id = sub.id;
+    if (sub.done) setDone(item, true, now);
+    list.items.splice(list.items.indexOf(parent) + 1, 0, item);
+    return true;
+  }
+
   // ------------------------------------------------------------------- pool
 
   function listById(state, id) {
@@ -537,6 +587,7 @@ var UnstuckLogic = (() => {
     startTimer, timerRemaining, timerFinished, pauseTimer, resumeTimer, extendTimer,
     normalizeTimer, formatClock, formatMinutes,
     setDone, logSession, subsDone, allSubsDone, setSubsDone, setDoneWithSubs, syncFromSubs,
+    subFromItem, nestItem, moveSub, promoteSub,
     listById, isPickable, pickableCount, activeLists, pool,
     recentDepth, chooseFrom, pushHistory,
     plural, relativeDay, listSummary, cardMeta,

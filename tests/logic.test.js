@@ -843,6 +843,101 @@ test('subtasks survive a backup round-trip', () => {
   assert.deepEqual(L.migrate(JSON.parse(JSON.stringify(s))), s);
 });
 
+// ------------------------------------------------------- moving things
+
+test('nesting an item files it under another as a step', () => {
+  const l = list('House', 'once', ['Sort the pile', 'Hoover']);
+  const [pile, hoover] = l.items;
+
+  assert.equal(L.nestItem(l, hoover, pile), true);
+  assert.deepEqual(l.items.map((i) => i.text), ['Sort the pile'], 'it leaves the list');
+  assert.deepEqual(pile.subs.map((s) => s.text), ['Hoover']);
+  assert.equal(pile.subs[0].id, hoover.id, 'a thing keeps its identity across the move');
+  assert.equal(L.pool(stateWith([l])).length, 1, 'and it is no longer picked on its own');
+});
+
+test('a checked item nested keeps reading as checked', () => {
+  const l = list('House', 'once', [item('Sort the pile'), item('Hoover', { done: true, count: 1 })]);
+  L.nestItem(l, l.items[1], l.items[0]);
+  assert.equal(l.items[0].subs[0].done, true);
+});
+
+test('nesting flattens the steps the moved thing already had', () => {
+  // One level is all the picker and the card can show, so its steps come along
+  // beside it rather than underneath.
+  const l = list('House', 'once', ['Sort the pile', 'Tidy the desk']);
+  const [pile, desk] = l.items;
+  desk.subs = [L.newSub('Bin the paper'), L.newSub('Coil the cables')];
+
+  L.nestItem(l, desk, pile);
+  assert.deepEqual(pile.subs.map((s) => s.text), ['Tidy the desk', 'Bin the paper', 'Coil the cables']);
+  assert.deepEqual(desk.subs, [], 'nothing may be left behind on the moved thing');
+});
+
+test('an item cannot be nested under itself or under something not in the list', () => {
+  const l = list('House', 'once', ['Sort the pile', 'Hoover']);
+  const stranger = item('Elsewhere');
+  assert.equal(L.nestItem(l, l.items[0], l.items[0]), false);
+  assert.equal(L.nestItem(l, l.items[0], stranger), false);
+  assert.equal(l.items.length, 2, 'a refused move must change nothing');
+});
+
+test('a step can be handed to a different owner', () => {
+  const l = list('House', 'once', ['Sort the pile', 'Tidy the desk']);
+  const [pile, desk] = l.items;
+  pile.subs = [L.newSub('Bin the paper')];
+
+  assert.equal(L.moveSub(l, pile, pile.subs[0], desk), true);
+  assert.deepEqual(pile.subs, []);
+  assert.deepEqual(desk.subs.map((s) => s.text), ['Bin the paper']);
+  assert.equal(L.moveSub(l, desk, desk.subs[0], desk), false, 'moving it onto its own owner is not a move');
+});
+
+test('a step promoted stands on its own, right after what it came from', () => {
+  const l = list('House', 'once', ['Sort the pile', 'Wash up']);
+  const pile = l.items[0];
+  pile.subs = [L.newSub('Hoover')];
+
+  assert.equal(L.promoteSub(l, pile, pile.subs[0], 5000), true);
+  assert.deepEqual(l.items.map((i) => i.text), ['Sort the pile', 'Hoover', 'Wash up']);
+  assert.deepEqual(pile.subs, []);
+  assert.deepEqual(l.items[1].subs, [], 'it arrives as an ordinary item');
+  assert.equal(L.pool(stateWith([l])).length, 3, 'and joins the pool');
+});
+
+test('promoting a checked step makes a checked item, tally and all', () => {
+  const l = list('House', 'once', ['Sort the pile']);
+  const pile = l.items[0];
+  pile.subs = [Object.assign(L.newSub('Hoover'), { done: true })];
+
+  L.promoteSub(l, pile, pile.subs[0], 5000);
+  const moved = l.items[1];
+  assert.equal(moved.done, true);
+  assert.equal(moved.count, 1, 'being checked off is one completion, however it got there');
+  assert.equal(moved.doneAt, 5000);
+});
+
+test('a nested step round-trips back out unchanged', () => {
+  const l = list('House', 'once', ['Sort the pile', 'Hoover']);
+  const [pile, hoover] = l.items;
+
+  L.nestItem(l, hoover, pile);
+  L.promoteSub(l, pile, pile.subs[0]);
+  assert.deepEqual(l.items.map((i) => i.text), ['Sort the pile', 'Hoover']);
+  assert.equal(l.items[1].id, hoover.id, 'the id survives the round trip');
+  assert.deepEqual(pile.subs, []);
+});
+
+test('nesting the last unfinished thing under a done one reopens it', () => {
+  const l = list('House', 'once', [item('Sort the pile', { done: true, count: 1 }), item('Hoover')]);
+  const [pile, hoover] = l.items;
+
+  L.nestItem(l, hoover, pile);
+  L.syncFromSubs(l, pile, 9000);
+  assert.equal(pile.done, false, 'an unfinished step means an unfinished thing');
+  assert.equal(L.pickableCount(l), 1);
+});
+
 // ------------------------------------------------------------------ shape
 
 test('emptyState is a valid state that round-trips through migrate', () => {
