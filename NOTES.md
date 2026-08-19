@@ -1,24 +1,27 @@
 # Where Unstuck is up to
 
-Working notes, last updated 2026-08-10. The README covers how the app works and how to run it —
+Working notes, last updated 2026-08-19. The README covers how the app works and how to run it —
 this is state and direction only.
 
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-Working tree clean, everything pushed. 81 unit checks (`./test.sh`) and 43 browser checks
-(`./test.sh --browser`) passing.
+91 unit checks (`./test.sh`) and 59 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
-switches, starter lists, custom colours with a wheel, per-list timers, and accessibility settings.
+switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
+settings.
+
+**Uncommitted:** the week-of-use round — subtasks (schema 3), the list options sheet, and the swipe
+verdicts moved off the card.
 
 The repo is **public**, which it had to be — GitHub Pages will not serve a private repo on the free
 plan. Only the code is public; lists live in each device's storage and never leave it.
 
 ## Next up
 
-1. **Use it for a week.** Deliberate — the widget's design depends on what you actually want at a
-   glance, and that is not answerable from a chair. Everything below can wait behind this.
+1. **Use the new round for a week**, the same way. The widget's design still depends on what you
+   actually want at a glance, and that is not answerable from a chair.
 
 2. **Android home-screen widget.** Needs the native wrap; a PWA cannot provide one. Decisions
    already made:
@@ -57,6 +60,12 @@ plan. Only the code is public; lists live in each device's storage and never lea
   pick never asks anything. Count the taps before proposing UI.
 - **No voice-to-text.** Android's keyboard mic already dictates into every field, and the Web Speech
   API is Chrome-only and sends audio off-device.
+- **Subtasks are parts, not things.** Only their parent is ever picked. Putting steps in the pool
+  would hand you a six-step job six times as often as *wash up* — the odds distortion is the whole
+  reason, and it is not fixable by weighting without reintroducing knobs.
+- **Whole-list actions live in one sheet**, reached by holding a list or by the ⋯ beside its title.
+  Nothing that edits a list goes near the row that adds to one: "Edit list" sat above the add row
+  and got pressed by a thumb reaching to add an item.
 
 ## Ideas, not commitments
 

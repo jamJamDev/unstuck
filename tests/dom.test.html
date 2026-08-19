@@ -106,13 +106,37 @@
     'a pick to settle'
   );
 
+  /** The options sheet, and the edit dialog that sits behind it. */
+  const openListOptions = (app) => app.$('listOptionsBtn').click();
+  function openEditDialog(app) {
+    openListOptions(app);
+    app.$('actionsEdit').click();
+  }
+
+  /** Opens the one list in a booted app, ready to drive its detail screen. */
+  async function openTheList(app) {
+    app.$('tabLists').click();
+    app.doc.querySelector('#listGrid .list-card').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    return app;
+  }
+
+  /** A held press, as the list grid reads one. */
+  async function longPress(app, el) {
+    const opts = { bubbles: true, pointerId: 1, clientX: 10, clientY: 10 };
+    el.dispatchEvent(new app.win.PointerEvent('pointerdown', opts));
+    await sleep(600);
+    el.dispatchEvent(new app.win.PointerEvent('pointerup', opts));
+    el.click();
+  }
+
   /** Boots a one-list app and opens its colour picker, ready to drive. */
   async function openColourPicker() {
     const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
-    app.$('editListBtn').click();
+    openEditDialog(app);
     await waitFor(() => app.$('listDialog').open, 'the edit dialog');
     app.$('addColorBtn').click();
     await waitFor(() => shown(app.win, app.$('colorWheel')), 'the colour wheel');
@@ -189,12 +213,12 @@
     const books = listOf('once', 'Books', ['Piranesi', 'Station Eleven'], { keepDone: true, showProgress: true });
     books.items[0].done = true;
     const app = await boot(stateOf([books]));
-    equal(app.doc.querySelector('#chips .chip .count').textContent, '1', 'one unticked book to start');
+    equal(app.doc.querySelector('#chips .chip .count').textContent, '1', 'one unchecked book to start');
 
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
-    app.$('editListBtn').click();
+    openEditDialog(app);
     await waitFor(() => app.$('listDialog').open, 'the edit dialog');
     equal(shown(app.win, app.$('kindField')), true, 'the kind must be editable, not locked');
 
@@ -203,12 +227,12 @@
     await waitFor(() => stored().lists[0].kind === 'endless', 'the kind change');
 
     equal(stored().lists[0].items.length, 2, 'no item may be lost');
-    equal(stored().lists[0].items[0].done, true, 'the tick is kept, just ignored');
+    equal(stored().lists[0].items[0].done, true, 'the check is kept, just ignored');
     app.$('tabDecide').click();
-    equal(app.doc.querySelector('#chips .chip .count').textContent, '2', 'ticked items rejoin the pool');
+    equal(app.doc.querySelector('#chips .chip .count').textContent, '2', 'checked items rejoin the pool');
   });
 
-  test('a ticked item becomes a one-session entry when switched to ongoing', async () => {
+  test('a checked item becomes a one-session entry when switched to ongoing', async () => {
     // Regression: it stayed struck through with a 0x tally, reading as both
     // finished and never done.
     const app = await boot(stateOf([listOf('once', 'Books', ['Piranesi', 'Station Eleven'], { keepDone: true, showProgress: true })]));
@@ -216,9 +240,9 @@
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
     app.doc.querySelector('#openItems .check').click();
-    await waitFor(() => stored().lists[0].items[0].done, 'the tick');
+    await waitFor(() => stored().lists[0].items[0].done, 'the check');
 
-    app.$('editListBtn').click();
+    openEditDialog(app);
     app.doc.querySelector('input[name="kind"][value="endless"]').checked = true;
     app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
     await waitFor(() => stored().lists[0].kind === 'endless', 'the kind change');
@@ -228,10 +252,10 @@
     equal([...rows].some((r) => r.classList.contains('checked')), false, 'nothing may be struck out as ongoing');
     equal(shown(app.win, app.$('doneSection')), false, 'an ongoing list has no done section');
     const tallies = [...app.doc.querySelectorAll('#openItems .tally')].map((t) => t.textContent);
-    equal(tallies.join(','), '1×,0×', 'the ticked one must read as one session');
+    equal(tallies.join(','), '1×,0×', 'the checked one must read as one session');
   });
 
-  test('sessions logged as ongoing show as ticked when switched back', async () => {
+  test('sessions logged as ongoing show as checked when switched back', async () => {
     const app = await boot(stateOf([listOf('endless', 'Practice', ['Guitar', 'Spanish'])]));
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
@@ -240,7 +264,7 @@
     for (let i = 0; i < 3; i++) app.doc.querySelector('#openItems .tally').click();
     await waitFor(() => stored().lists[0].items[0].count === 3, 'three logged sessions');
 
-    app.$('editListBtn').click();
+    openEditDialog(app);
     app.doc.querySelector('input[name="kind"][value="once"]').checked = true;
     app.doc.querySelector('input[name="keep"][value="clear"]').checked = true;
     app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
@@ -256,13 +280,222 @@
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
-    app.$('editListBtn').click();
+    openEditDialog(app);
     app.doc.querySelector('input[name="kind"][value="endless"]').checked = true;
     app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
     await waitFor(() => stored().lists[0].kind === 'endless', 'the kind change');
     equal(app.$('toastText').textContent, 'This list is now: Ongoing');
     app.$('toastAction').click();
     await waitFor(() => stored().lists[0].kind === 'once', 'the undo');
+  });
+
+  // ------------------------------------------------------ list options
+
+  test('nothing that edits a list sits next to the row that adds to one', async () => {
+    // Regression: Edit list sat directly above the add row and got pressed by
+    // people reaching to add an item.
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Wash up'])])));
+    equal(app.$('editListBtn'), null, 'the edit button must not be back on the detail screen');
+    equal(app.$('deleteListBtn'), null, 'nor the delete button');
+    equal(shown(app.win, app.$('listOptionsBtn')), true, 'the options button replaces both');
+    equal(app.doc.querySelector('#screenList .detail-foot'), null, 'and the footer with it');
+  });
+
+  test('the options sheet deletes a list, and the delete can be undone', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Wash up'])])));
+    openListOptions(app);
+    await waitFor(() => app.$('actionsDialog').open, 'the options sheet');
+    equal(app.$('actionsSub').textContent, 'House', 'the sheet must name the list it acts on');
+
+    app.$('actionsDelete').click();
+    await waitFor(() => stored().lists.length === 0, 'the delete');
+    equal(app.$('actionsDialog').open, false, 'the sheet closes behind it');
+
+    app.$('toastAction').click();
+    await waitFor(() => stored().lists.length === 1, 'the undo');
+    equal(stored().lists[0].items.length, 1, 'the list comes back with its contents');
+  });
+
+  test('a long press on a list opens its options instead of opening the list', async () => {
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
+    app.$('tabLists').click();
+    await longPress(app, app.doc.querySelector('#listGrid .list-card'));
+    await waitFor(() => app.$('actionsDialog').open, 'the options sheet');
+    equal(shown(app.win, app.$('screenList')), false, 'the press must not also open the list');
+    equal(app.$('actionsSub').textContent, 'House');
+  });
+
+  test('a plain tap on a list still opens it', async () => {
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
+    app.$('tabLists').click();
+    const card = app.doc.querySelector('#listGrid .list-card');
+    card.dispatchEvent(new app.win.PointerEvent('pointerdown', { bubbles: true, pointerId: 1, clientX: 10, clientY: 10 }));
+    card.dispatchEvent(new app.win.PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: 10, clientY: 10 }));
+    card.click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    equal(app.$('actionsDialog').open, false, 'a quick tap is not a long press');
+  });
+
+  test('a long press deleting a list from the grid leaves no detail screen behind', async () => {
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up']), listOf('once', 'Work', ['Email'])]));
+    app.$('tabLists').click();
+    await longPress(app, app.doc.querySelectorAll('#listGrid .list-card')[1]);
+    await waitFor(() => app.$('actionsDialog').open, 'the options sheet');
+    app.$('actionsDelete').click();
+    await waitFor(() => stored().lists.length === 1, 'the delete');
+    equal(stored().lists[0].name, 'House', 'the wrong list was deleted');
+    equal(shown(app.win, app.$('screenLists')), true, 'the grid must stay on screen');
+  });
+
+  // ----------------------------------------------------------- subtasks
+
+  /** Adds a subtask to the nth open item through the row's own + button. */
+  async function addSub(app, index, text) {
+    app.doc.querySelectorAll('#openItems .addsub')[index].click();
+    const input = await waitFor(() => app.doc.querySelector('#openItems .sub-input'), 'the subtask input');
+    input.value = text;
+    input.dispatchEvent(new app.win.Event('input', { bubbles: true }));
+    input.dispatchEvent(new app.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  }
+
+  test('a subtask is added, listed under its thing, and counted', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Sort the pile'])])));
+    await addSub(app, 0, 'Clothes away');
+    await waitFor(() => stored().lists[0].items[0].subs.length === 1, 'the subtask');
+
+    equal(stored().lists[0].items[0].subs[0].text, 'Clothes away');
+    equal(app.doc.querySelectorAll('#openItems .subs li .text').length, 1, 'it must show under its thing');
+    equal(app.doc.querySelector('#openItems .item .count').textContent, '0/1');
+    equal(app.doc.querySelectorAll('#openItems .item').length, 1, 'a subtask is not a second item');
+  });
+
+  test('subtasks never join the pool', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Sort the pile'])])));
+    await addSub(app, 0, 'Clothes away');
+    await addSub(app, 0, 'Hoover');
+    await waitFor(() => stored().lists[0].items[0].subs.length === 2, 'both subtasks');
+    app.$('tabDecide').click();
+    equal(app.doc.querySelector('#chips .chip .count').textContent, '1',
+      'one pickable thing, however many steps it has');
+  });
+
+  test('checking the last subtask checks the thing off', async () => {
+    const app = await openTheList(await boot(stateOf([listOf('once', 'House', ['Sort the pile'])])));
+    await addSub(app, 0, 'Clothes away');
+    await addSub(app, 0, 'Hoover');
+    await waitFor(() => stored().lists[0].items[0].subs.length === 2, 'both subtasks');
+
+    const boxes = () => app.doc.querySelectorAll('#openItems .subs .check');
+    boxes()[0].click();
+    await waitFor(() => stored().lists[0].items[0].subs[0].done, 'the first check');
+    equal(stored().lists[0].items[0].done, false, 'half done is not done');
+
+    app.doc.querySelectorAll('#openItems .subs .check, #doneItems .subs .check')[1].click();
+    await waitFor(() => stored().lists[0].items[0].done, 'the thing to finish itself');
+    equal(stored().lists[0].items[0].count, 1, 'and to count as one completion');
+  });
+
+  test('unchecking one subtask puts the thing back in the pool, keeping the others', async () => {
+    const list = listOf('once', 'House', ['Sort the pile'], { keepDone: true });
+    list.items[0].subs = [
+      { id: 's1', text: 'Clothes away', done: true },
+      { id: 's2', text: 'Hoover', done: true },
+    ];
+    list.items[0].done = true;
+    list.items[0].count = 1;
+    const app = await openTheList(await boot(stateOf([list])));
+
+    app.doc.querySelectorAll('#openItems .subs .check')[0].click();
+    await waitFor(() => stored().lists[0].items[0].done === false, 'the thing to reopen');
+    equal(stored().lists[0].items[0].subs[1].done, true, 'the other step must be left alone');
+    app.$('tabDecide').click();
+    equal(app.doc.querySelector('#chips .chip .count').textContent, '1', 'it is pickable again');
+  });
+
+  test('checking the thing itself settles its subtasks with it', async () => {
+    const list = listOf('once', 'House', ['Sort the pile'], { keepDone: true });
+    list.items[0].subs = [{ id: 's1', text: 'Clothes away', done: false }];
+    const app = await openTheList(await boot(stateOf([list])));
+
+    app.doc.querySelector('#openItems .item > .check').click();
+    await waitFor(() => stored().lists[0].items[0].done, 'the check');
+    equal(stored().lists[0].items[0].subs[0].done, true, 'the step is part of the thing');
+  });
+
+  test('adding a subtask to a finished thing reopens it', async () => {
+    const list = listOf('once', 'House', ['Sort the pile'], { keepDone: true });
+    list.items[0].done = true;
+    list.items[0].count = 1;
+    const app = await openTheList(await boot(stateOf([list])));
+
+    app.doc.querySelector('#openItems .addsub').click();
+    const input = await waitFor(() => app.doc.querySelector('#openItems .sub-input'), 'the subtask input');
+    input.value = 'One more bit';
+    input.dispatchEvent(new app.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    await waitFor(() => stored().lists[0].items[0].done === false, 'the thing to reopen');
+    equal(stored().lists[0].items[0].subs.length, 1);
+  });
+
+  test('a picked card shows the steps, and finishing them accepts the pick', async () => {
+    const list = listOf('once', 'House', ['Sort the pile']);
+    list.items[0].subs = [{ id: 's1', text: 'Clothes away', done: false }];
+    const app = await boot(stateOf([list]));
+    app.$('pickBtn').click();
+    await settled(app);
+
+    equal(shown(app.win, app.$('cardSubs')), true, 'the card must say what doing it involves');
+    equal(app.doc.querySelector('#cardSubs .label').textContent, 'Clothes away');
+
+    app.doc.querySelector('#cardSubs .step').click();
+    await waitFor(() => stored().lists[0].items[0].done, 'the pick to be accepted');
+    equal(app.$('doBtn').textContent, 'Pick another', 'the card must move to its accepted state');
+    equal(shown(app.win, app.$('cardSubs')), false, 'the checklist is done with');
+  });
+
+  test('undoing an accept driven by the card checklist restores every step', async () => {
+    const list = listOf('once', 'House', ['Sort the pile']);
+    list.items[0].subs = [{ id: 's1', text: 'Clothes away', done: false }];
+    const app = await boot(stateOf([list]));
+    app.$('pickBtn').click();
+    await settled(app);
+
+    app.doc.querySelector('#cardSubs .step').click();
+    await waitFor(() => stored().lists[0].items[0].done, 'the accept');
+    app.$('toastAction').click();
+    await waitFor(() => stored().lists[0].items[0].done === false, 'the undo');
+    equal(stored().lists[0].items[0].subs[0].done, false, 'the step must come back unchecked');
+    equal(stored().lists[0].items[0].count, 0, 'and the completion must be withdrawn');
+  });
+
+  test('an ongoing thing clears its steps once a session is logged', async () => {
+    const list = listOf('endless', 'Practice', ['Guitar']);
+    list.items[0].subs = [{ id: 's1', text: 'Scales', done: false }];
+    const app = await openTheList(await boot(stateOf([list])));
+
+    app.doc.querySelector('#openItems .subs .check').click();
+    await waitFor(() => stored().lists[0].items[0].count === 1, 'the logged session');
+    equal(stored().lists[0].items[0].subs[0].done, false, 'the steps reset for next time');
+  });
+
+  test('a subtask can be deleted, and the delete undone', async () => {
+    const list = listOf('once', 'House', ['Sort the pile']);
+    list.items[0].subs = [{ id: 's1', text: 'Clothes away', done: false }];
+    const app = await openTheList(await boot(stateOf([list])));
+
+    app.doc.querySelector('#openItems .subs .kill').click();
+    await waitFor(() => stored().lists[0].items[0].subs.length === 0, 'the delete');
+    app.$('toastAction').click();
+    await waitFor(() => stored().lists[0].items[0].subs.length === 1, 'the undo');
+    equal(stored().lists[0].items[0].subs[0].text, 'Clothes away');
+  });
+
+  test('the swipe verdicts stand outside the card, so they hold still as it moves', async () => {
+    // Regression: they were inside the card, so they slid off screen with it —
+    // unreadable exactly when they were meant to be read.
+    const app = await boot(stateOf([listOf('once', 'House', ['Wash up'])]));
+    equal(app.doc.querySelectorAll('#card .verdict').length, 0, 'nothing that must hold still may ride the card');
+    equal(app.doc.querySelectorAll('#stage > .verdict').length, 2, 'both verdicts belong to the stage');
   });
 
   test('picking draws a real item and announces it', async () => {
@@ -305,21 +538,21 @@
     app.$('doBtn').click();
     await waitFor(() => stored().lists[0].items[0].count === 1, 'the session to be logged');
     const item = stored().lists[0].items[0];
-    // `done` is deliberately set too, so the same item reads as ticked if the
-    // list is later switched to a tick view. It must not affect it while ongoing.
-    equal(item.done, true, 'a logged session is a completion for the tick views');
+    // `done` is deliberately set too, so the same item reads as checked if the
+    // list is later switched to a check view. It must not affect it while ongoing.
+    equal(item.done, true, 'a logged session is a completion for the check views');
     assert(item.lastDone > 0, 'lastDone must be stamped');
     equal(app.$('toastText').textContent, 'Logged — that’s 1 time.');
     equal(app.doc.querySelector('#chips .chip .count').textContent, '1', 'it stays in the pool');
   });
 
-  test('accepting a collection item ticks it off and reports progress', async () => {
+  test('accepting a collection item checks it off and reports progress', async () => {
     const app = await boot(stateOf([listOf('once', 'Books', ['Piranesi', 'Station Eleven'], { keepDone: true, showProgress: true })]));
     app.$('pickBtn').click();
     await settled(app);
     app.$('doBtn').click();
-    await waitFor(() => stored().lists[0].items.some((i) => i.done), 'the book to be ticked');
-    equal(app.$('cardMeta').textContent, 'Ticked off — 1 of 2.');
+    await waitFor(() => stored().lists[0].items.some((i) => i.done), 'the book to be checked');
+    equal(app.$('cardMeta').textContent, 'Checked off — 1 of 2.');
   });
 
   test('undo restores an accepted pick', async () => {
@@ -366,7 +599,7 @@
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
-    app.$('editListBtn').click();
+    openEditDialog(app);
     app.$('listName').value = 'Home jobs';
     app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
     await waitFor(() => stored().lists[0].name === 'Home jobs', 'the rename to save');
@@ -408,20 +641,20 @@
     equal(stored().lists[0].items[1].text, 'Take the recycling out', 'undo restored the wrong item');
   });
 
-  test('a sweeping list moves ticked items into a Done pile', async () => {
+  test('a sweeping list moves checked items into a Done pile', async () => {
     const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up', 'Bins out'])]));
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
     app.doc.querySelector('#openItems .check').click();
     await waitFor(() => app.doc.querySelectorAll('#doneItems .item').length === 1, 'the done section');
-    equal(app.doc.querySelectorAll('#openItems .item').length, 1, 'the ticked one must leave the main list');
+    equal(app.doc.querySelectorAll('#openItems .item').length, 1, 'the checked one must leave the main list');
     equal(app.$('doneLabel').textContent, 'Done · 1');
     equal(app.doc.querySelector('#doneItems .check').getAttribute('aria-checked'), 'true');
     equal(shown(app.win, app.$('detailProgress')), false, 'this list reads as what is left, not progress');
   });
 
-  test('a record list keeps ticked items in place and shows progress', async () => {
+  test('a record list keeps checked items in place and shows progress', async () => {
     const app = await boot(stateOf([
       listOf('once', 'Books', ['Piranesi', 'Station Eleven', 'Earthsea'], { keepDone: true, showProgress: true }),
     ]));
@@ -429,11 +662,11 @@
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
     app.doc.querySelector('#openItems .check').click();
-    await waitFor(() => stored().lists[0].items[0].done, 'the tick');
+    await waitFor(() => stored().lists[0].items[0].done, 'the check');
 
     equal(app.doc.querySelectorAll('#openItems .item').length, 3, 'a record keeps everything on screen');
     equal(shown(app.win, app.$('doneSection')), false, 'nothing is swept away');
-    equal(app.doc.querySelectorAll('#openItems .item.checked').length, 1, 'the ticked one is struck through in place');
+    equal(app.doc.querySelectorAll('#openItems .item.checked').length, 1, 'the checked one is struck through in place');
     equal(shown(app.win, app.$('detailProgress')), true);
     equal(app.$('detailProgressText').textContent, '1 of 3 done');
     equal(app.$('detailProgressFill').style.width, '33%');
@@ -451,7 +684,7 @@
     await waitFor(() => app.doc.querySelectorAll('#doneItems .item').length === 1, 'the done pile');
     equal(shown(app.win, app.$('detailProgress')), true, 'progress must not depend on keeping the record');
     equal(app.$('detailProgressText').textContent, '1 of 4 done');
-    equal(shown(app.win, app.$('untickAllBtn')), false, 'a swept list clears its pile instead of unticking');
+    equal(shown(app.win, app.$('uncheckAllBtn')), false, 'a swept list clears its pile instead of unchecking');
   });
 
   test('both display options are on screen when the edit dialog opens', async () => {
@@ -462,7 +695,7 @@
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
-    app.$('editListBtn').click();
+    openEditDialog(app);
     await waitFor(() => app.$('listDialog').open, 'the edit dialog');
 
     const viewport = app.win.innerHeight;
@@ -479,7 +712,7 @@
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
-    app.$('editListBtn').click();
+    openEditDialog(app);
     await waitFor(() => app.$('listDialog').open, 'the edit dialog');
 
     equal(shown(app.win, app.$('customColor')), false, 'the picker starts closed');
@@ -573,7 +806,7 @@
     app.$('tabLists').click();
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
-    app.$('editListBtn').click();
+    openEditDialog(app);
     await waitFor(() => app.$('listDialog').open, 'the edit dialog');
     app.$('addColorBtn').click();
 
@@ -732,13 +965,13 @@
     app.doc.querySelector('#listGrid .list-card').click();
     await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
     equal(shown(app.win, app.$('detailProgress')), false, 'progress is meaningless with no end');
-    app.$('editListBtn').click();
+    openEditDialog(app);
     await waitFor(() => app.$('listDialog').open, 'the edit dialog');
     equal(shown(app.win, app.$('keepField')), false, 'nothing is ever finished, so nothing to place');
     equal(shown(app.win, app.$('progressField')), false);
     app.doc.querySelector('input[name="kind"][value="once"]').checked = true;
     app.doc.querySelector('input[name="kind"][value="once"]').dispatchEvent(new app.win.Event('change', { bubbles: true }));
-    equal(shown(app.win, app.$('keepField')), true, 'switching to tick-off reveals them');
+    equal(shown(app.win, app.$('keepField')), true, 'switching to check-off reveals them');
     equal(shown(app.win, app.$('progressField')), true);
   });
 

@@ -25,7 +25,7 @@ the browser only — for a real "Add to Home Screen" install, host the folder on
 Netlify.
 
 **Editing gotcha:** `sw.js` is network-first, but browsers still cache aggressively. After an edit,
-hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v4`), or load with a `?v=N`
+hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v5`), or load with a `?v=N`
 cache-buster. If a change seems not to apply, this is almost always why.
 
 ## Layout
@@ -62,15 +62,17 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (81 checks, `node --test`, zero dependencies) — validation and coercion
+- **`tests/logic.test.js`** (91 checks, `node --test`, zero dependencies) — validation and coercion
   in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
-  selection scoping, the starter-list definitions, the done/count linkage, and the pick algorithm
-  with an injected RNG so every branch is deterministic.
-- **`tests/dom.test.html`** (43 checks) — loads the real app in an iframe with real CSS and real
+  selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
+  directions, and the pick algorithm with an injected RNG so every branch is deterministic.
+- **`tests/dom.test.html`** (59 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
-  only what was ticked, that a kind change keeps every item, that the two display switches are
-  genuinely independent, that corrupt saved data warns instead of starting silently empty.
+  only what was checked, that a kind change keeps every item, that the two display switches are
+  genuinely independent, that a long press opens a list's options while a tap opens the list, that
+  subtasks reach the card and never the pool, that corrupt saved data warns instead of starting
+  silently empty.
 
 Both suites were mutation-checked — the behaviour each one guards was deliberately broken to confirm
 the right test turns red. The one thing neither covers is the **drag gesture**: synthetic pointer
@@ -80,19 +82,19 @@ events cannot hold a pointer capture, so swipe-to-skip and swipe-to-accept are v
 
 A list has a **theme** (what it is about) and a **kind** (how finishing works). They are deliberately
 separate, because theme cannot determine mechanics — "Creative" spans both kinds: *sketch for
-fifteen minutes* is ongoing, while *finish the album art* is something you tick off once.
+fifteen minutes* is ongoing, while *finish the album art* is something you check off once.
 
 The theme is just the list's name. The kind decides exactly one thing — whether finishing takes an
 item out of the pool — so there are only two:
 
 | Kind | For | Finishing something |
 |---|---|---|
-| **Tick off** | chores, books, errands | takes it out of the hat |
+| **Check off** | chores, books, errands | takes it out of the hat |
 | **Ongoing** | practise guitar, go for a walk | never leaves — each pick logs a session (`3× · last Tuesday`) |
 
-Everything else is presentation, and each part is its own switch on a tick-off list:
+Everything else is presentation, and each part is its own switch on a check-off list:
 
-- **Once something's ticked off** — it stays put as a record, or drops into a **Done** pile you can
+- **Once something's checked off** — it stays put as a record, or drops into a **Done** pile you can
   clear out.
 - **How the list reads** — `2 of 12 done` with a progress bar, or `10 things left`.
 
@@ -101,16 +103,16 @@ left. Schema 1 had a third kind, `checklist`, which was only ever these two swit
 together — which is exactly why it felt like a duplicate of `todo` in use. The picker cannot tell
 any of it apart; only `kind` ever reaches it.
 
-**The kind is not a commitment.** Change it whenever, from Edit list — you rarely know which
+**The kind is not a commitment.** Change it whenever, from List options — you rarely know which
 mechanic fits until you have lived with a list.
 
 Switching is lossless because `done` and `count` are two readings of one fact — *how many times has
 this been finished* — and are kept in step:
 
-- Ticking something off is itself one completion, so it reads as `1×` if the list becomes Ongoing.
-- Logging a session marks it finished, so it reads as ticked if the list becomes a tick list.
-- Unticking withdraws the completion a tick implied, but never a tally built from real sessions —
-  untick something with ten logged sessions and all ten survive.
+- Checking something off is itself one completion, so it reads as `1×` if the list becomes Ongoing.
+- Logging a session marks it finished, so it reads as checked if the list becomes a check list.
+- Unchecking withdraws the completion a check implied, but never a tally built from real sessions —
+  uncheck something with ten logged sessions and all ten survive.
 
 An Ongoing list never strikes anything out or shows a Done section, whatever `done` says underneath.
 
@@ -131,14 +133,31 @@ Arrow keys drive the wheel too, since a wheel is otherwise pointer-only.
 
 **Starter lists** (offered on a first run, and any time from the Lists screen) are themed, with the
 kind that suits them already set: Around the house, Productive, Creative, Get outside, Rest, Learn
-something, Books to read, Films to watch. Nothing is preselected — you tick the ones you want, and
+something, Books to read, Films to watch. Nothing is preselected — you pick the ones you want, and
 they are ordinary lists afterwards, editable and deletable like any other. The ones whose contents
 are a matter of taste (books, films) arrive empty on purpose; a suggested reading list would just be
 someone else's.
 
+## Subtasks
+
+Anything in a list can be broken into steps with the **+** on its row. They are *parts of one thing*,
+never things in their own right:
+
+- **The picker never sees them.** `pool()` walks `list.items`, so a task with six steps has exactly
+  the same chance as *wash up* — the alternative hands you a six-step job six times as often.
+- **The card carries them.** A pick with steps shows them as a checklist under its title, checkable as
+  you go, so "I'm doing it" says what it actually involves. They appear only once the riffle lands,
+  never mid-flicker.
+- **Steps and their parent are one fact.** Checking the last step finishes the thing, and reopening a
+  step reopens it — its siblings are left alone. Checking the thing itself settles all of its steps.
+  On an ongoing list, finishing the steps logs a session and clears them for the next time round.
+- **Adding one is a burst.** Enter files a step and reopens the field, the way the add row takes
+  items. The half-typed text lives in `ui.subDraft`, not the field, so redrawing the list cannot lose
+  it — and a blur that a redraw itself caused is ignored rather than treated as leaving the field.
+
 ## Timers
 
-A list can carry a standing timer length (Edit list → Timer). Accepting a pick from that list starts
+A list can carry a standing timer length (List options → Timer). Accepting a pick from that list starts
 it automatically — no prompt, no duration to choose, because the point of setting one is that you
 already decided. A list without one shows `15 / 30 / 45 / 1 hour` on the accepted card instead, so
 timing it ad hoc costs one tap. "Set a timer" on the Decide screen covers timing something that was
@@ -195,7 +214,7 @@ Two layers keep rerolls from feeling repetitive:
 Selection is otherwise uniform random — no weighting, no priority. That is deliberate: knobs to
 tune are one more thing to stall on.
 
-Accepting a pick ticks it off on a tick-off list, and logs one more session on an ongoing one.
+Accepting a pick checks it off on a check-off list, and logs one more session on an ongoing one.
 Every destructive or state-changing action shows a toast with **Undo**.
 
 ## Interaction
@@ -212,17 +231,29 @@ A vertical drag is released back to the page so the swipe handler never eats a s
 under the card changes wording based on `(pointer: coarse)`. `prefers-reduced-motion` drops the
 shuffle animation and the fly-out; the result still lands and is announced through the live region.
 
+**SKIP** and **DOING IT** belong to the stage, not the card: a verdict that rides the card slides off
+screen exactly as it becomes worth reading. They hold still while the card moves out from under them,
+and reach full strength at 45% of the trigger distance so the word is legible well before the swipe
+commits.
+
+Everything that acts on a whole list — edit, delete — lives behind one sheet, reached either by
+**holding** a list in the grid or by the **⋯** beside its title. Nothing that edits a list sits next
+to the row that adds to one; a held press swallows the click that follows it, so holding a list never
+also opens it.
+
 ## Storage
 
 One `localStorage` key, `unstuck.v1`:
 
 ```jsonc
 {
-  "schema": 2,
+  "schema": 3,
   "settings": { "textScale", "contrast", "motion", "speak" },
   "timer": { "duration", "endsAt", "label", "pausedAt" } | null,
   "lists": [{ "id", "name", "kind", "color", "keepDone", "showProgress", "timerMinutes", "items": [
-    { "id", "text", "done", "doneAt", "count", "lastDone" }
+    { "id", "text", "done", "doneAt", "count", "lastDone", "subs": [
+      { "id", "text", "done" }        // a step carries no tally: only its parent is ever picked
+    ]}
   ]}],
   "selection": ["<list id>"],   // empty = every list
   "history": ["<item id>"]      // last 40, newest last
@@ -230,9 +261,10 @@ One `localStorage` key, `unstuck.v1`:
 ```
 
 `migrate()` (in `logic.js`) is the single gate every inbound payload passes through — page load and
-backup import both. It coerces field types, drops empty items, resolves schema 1's three kinds into
-the current two-plus-two-switches shape, and throws on anything that isn't shaped like an Unstuck
-backup, so a bad import can't corrupt live state. It is idempotent, and an upgraded payload is
+backup import both. It coerces field types, drops empty items and empty steps, resolves schema 1's
+three kinds into the current two-plus-two-switches shape, and throws on anything that isn't shaped
+like an Unstuck backup, so a bad import can't corrupt live state. A payload with no `subs` at all —
+anything saved before schema 3 — loads with an empty one. It is idempotent, and an upgraded payload is
 written straight back so an old format never lingers in storage.
 
 If saved data can't be parsed, the app says so in a banner and **leaves the bytes alone** — the

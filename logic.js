@@ -7,7 +7,7 @@
 var UnstuckLogic = (() => {
   'use strict';
 
-  const SCHEMA = 2;
+  const SCHEMA = 3;
   const STORE_KEY = 'unstuck.v1';
   const COLORS = ['amber', 'rose', 'violet', 'sky', 'emerald', 'teal', 'orange', 'indigo'];
 
@@ -22,7 +22,7 @@ var UnstuckLogic = (() => {
    *   showProgress — the list reads as "2 of 12 done", or as "10 things left"
    * The picker cannot tell any of these apart; only `kind` reaches it.
    */
-  const KIND_LABEL = { once: 'Tick off', endless: 'Ongoing' };
+  const KIND_LABEL = { once: 'Check off', endless: 'Ongoing' };
 
   /** Schema 1 had a third kind that differed from `todo` only in presentation. */
   const LEGACY_KINDS = {
@@ -60,7 +60,16 @@ var UnstuckLogic = (() => {
   }
 
   function newItem(text) {
-    return { id: uid(), text, done: false, doneAt: 0, count: 0, lastDone: 0 };
+    return { id: uid(), text, done: false, doneAt: 0, count: 0, lastDone: 0, subs: [] };
+  }
+
+  /**
+   * A subtask breaks one pickable thing into its steps. It carries no tally of
+   * its own: the picker never sees a subtask, so nothing about it needs to be
+   * pickable, and the parent's four completion fields stay the only record.
+   */
+  function newSub(text) {
+    return { id: uid(), text, done: false };
   }
 
   function newList(name, kind, color, opts) {
@@ -232,6 +241,16 @@ var UnstuckLogic = (() => {
                 doneAt: Number(it.doneAt) || 0,
                 count: Number(it.count) || 0,
                 lastDone: Number(it.lastDone) || 0,
+                subs: Array.isArray(it.subs)
+                  ? it.subs
+                      .filter((s) => s && typeof s === 'object')
+                      .map((s) => ({
+                        id: typeof s.id === 'string' && s.id ? s.id : uid(),
+                        text: String(s.text == null ? '' : s.text),
+                        done: Boolean(s.done),
+                      }))
+                      .filter((s) => s.text.trim() !== '')
+                  : [],
               }))
               .filter((it) => it.text.trim() !== '')
           : [],
@@ -334,7 +353,7 @@ var UnstuckLogic = (() => {
   /**
    * `done` and `count` are two readings of one fact — how many times this has
    * been finished — so they are kept in step. Otherwise a list switched to
-   * Ongoing shows a ticked item at zero sessions, and switching back loses the
+   * Ongoing shows a checked item at zero sessions, and switching back loses the
    * tally.
    */
   function setDone(item, done, now) {
@@ -342,13 +361,13 @@ var UnstuckLogic = (() => {
     item.done = done;
     item.doneAt = done ? at : 0;
     if (done) {
-      // Ticking something off is itself one completion.
+      // Checking something off is itself one completion.
       if (item.count === 0) {
         item.count = 1;
         item.lastDone = at;
       }
     } else if (item.count === 1) {
-      // Unticking withdraws the completion the tick implied — but never a real
+      // Unchecking withdraws the completion the check implied — but never a real
       // tally built up from logged sessions.
       item.count = 0;
       item.lastDone = 0;
@@ -359,9 +378,43 @@ var UnstuckLogic = (() => {
     const at = now === undefined ? Date.now() : now;
     item.count += 1;
     item.lastDone = at;
-    // A logged session is a completion too, so the tick views agree with it.
+    // A logged session is a completion too, so the check views agree with it.
     item.done = true;
     item.doneAt = at;
+  }
+
+  const subsDone = (item) => item.subs.filter((s) => s.done).length;
+  const allSubsDone = (item) => item.subs.length > 0 && item.subs.every((s) => s.done);
+
+  function setSubsDone(item, done) {
+    for (const sub of item.subs) sub.done = done;
+  }
+
+  /** Checking the thing itself settles its subtasks with it — they are its parts. */
+  function setDoneWithSubs(item, done, now) {
+    setDone(item, done, now);
+    setSubsDone(item, done);
+  }
+
+  /**
+   * The other direction: a thing is finished exactly when its steps are, so the
+   * last check finishes it and reopening one step reopens it. Only the parent's
+   * own state moves here — the sibling steps are left alone. An ongoing item logs
+   * a session instead and its steps clear, ready for the next time round.
+   * Returns true when this check was the one that finished it.
+   */
+  function syncFromSubs(list, item, now) {
+    if (!item.subs.length) return false;
+    const all = allSubsDone(item);
+    if (list.kind === 'endless') {
+      if (!all) return false;
+      logSession(item, now);
+      setSubsDone(item, false);
+      return true;
+    }
+    if (all === item.done) return false;
+    setDone(item, all, now);
+    return all;
   }
 
   // ------------------------------------------------------------------- pool
@@ -470,7 +523,7 @@ var UnstuckLogic = (() => {
     }
     if (list.showProgress) {
       const done = list.items.filter((it) => it.done).length;
-      return done + ' of ' + list.items.length + ' ticked off so far.';
+      return done + ' of ' + list.items.length + ' checked off so far.';
     }
     const left = list.items.filter((it) => !it.done).length;
     return plural(left, 'thing', 'things') + ' left in this list.';
@@ -478,12 +531,12 @@ var UnstuckLogic = (() => {
 
   return {
     SCHEMA, STORE_KEY, COLORS, KIND_LABEL, HISTORY_LIMIT, STARTER_LISTS,
-    uid, emptyState, newItem, newList, listFromStarter, migrate, resolveKind,
+    uid, emptyState, newItem, newSub, newList, listFromStarter, migrate, resolveKind,
     normalizeHex, normalizeColor, isCustomColor, hsvToHex, hexToHsv,
     TIMER_PRESETS, TEXT_SCALES, DEFAULT_SETTINGS, normalizeSettings, normalizeTimerMinutes,
     startTimer, timerRemaining, timerFinished, pauseTimer, resumeTimer, extendTimer,
     normalizeTimer, formatClock, formatMinutes,
-    setDone, logSession,
+    setDone, logSession, subsDone, allSubsDone, setSubsDone, setDoneWithSubs, syncFromSubs,
     listById, isPickable, pickableCount, activeLists, pool,
     recentDepth, chooseFrom, pushHistory,
     plural, relativeDay, listSummary, cardMeta,

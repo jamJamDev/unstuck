@@ -227,6 +227,7 @@ main {
   place-items: center;
   padding: 18px 0;
   min-height: 320px;
+  position: relative;
 }
 
 .pick-btn {
@@ -294,6 +295,51 @@ main {
   overflow-wrap: anywhere;
 }
 
+/* What "doing it" actually involves, checkable as you go. */
+.card-subs {
+  list-style: none;
+  margin: 12px 0 14px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.card-subs[hidden] { display: none; }
+.card-subs li { display: flex; align-items: center; gap: 10px; }
+.card-subs .step {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: var(--text);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.card-subs .box {
+  width: 24px; height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 2px solid #48525f;
+  color: var(--accent-ink);
+  font-size: 0.8125rem;
+  font-weight: 900;
+  line-height: 1;
+}
+.card-subs .step[aria-checked="true"] .box {
+  background: var(--list-color, var(--accent));
+  border-color: var(--list-color, var(--accent));
+}
+.card-subs .step[aria-checked="true"] .label { color: var(--muted); text-decoration: line-through; }
+
 .card .meta {
   color: var(--muted);
   font-size: 0.875rem;
@@ -335,21 +381,24 @@ main {
   font-size: 0.8125rem;
 }
 
-/* Swipe affordance overlays, revealed as the card is dragged. */
-.card .verdict {
+/* Swipe affordance overlays. Anchored to the stage rather than the card so they
+   hold still and stay readable while the card is dragged out from under them. */
+.stage > .verdict {
   position: absolute;
-  top: 16px;
-  padding: 4px 10px;
-  border-radius: 8px;
-  border: 2px solid currentColor;
-  font-size: 0.8125rem;
-  font-weight: 800;
-  letter-spacing: 1px;
+  top: 50%;
+  z-index: 2;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 3px solid currentColor;
+  background: var(--bg);
+  font-size: 1.375rem;
+  font-weight: 900;
+  letter-spacing: 2px;
   opacity: 0;
   pointer-events: none;
 }
-.card .verdict.skip { left: 16px; color: var(--muted); transform: rotate(-8deg); }
-.card .verdict.go   { right: 16px; color: var(--good); transform: rotate(8deg); }
+.stage > .verdict.skip { left: 6px; color: var(--muted); transform: translateY(-50%) rotate(-9deg); }
+.stage > .verdict.go   { right: 6px; color: var(--good); transform: translateY(-50%) rotate(9deg); }
 
 .card.done-state { border-top-color: var(--good); }
 
@@ -461,6 +510,25 @@ main {
 /* ---------- List detail ---------- */
 
 .detail-head { margin-bottom: 14px; }
+.detail-title-row { display: flex; align-items: flex-start; gap: 10px; }
+.detail-title-row .title { flex: 1; min-width: 0; }
+
+/* Everything that is not "add another thing" lives behind this, well away from
+   the add row — reaching for one and hitting the other is the whole reason. */
+.options-btn {
+  flex: none;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  margin: -6px -8px 0 0;
+  background: none;
+  border: 0;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.options-btn:hover { color: var(--text); background: var(--surface-2); }
+
 .detail-head .title {
   display: flex;
   align-items: center;
@@ -479,7 +547,9 @@ main {
   gap: 8px;
   position: sticky;
   bottom: 0;
-  margin: 16px -4px 0;
+  /* auto on top: with a short list this drops the add row to the bottom of the
+     screen, where the thumb already is. */
+  margin: auto -4px 0;
   padding: 10px 4px calc(env(safe-area-inset-bottom, 0px) + 6px);
   background: linear-gradient(to top, var(--bg) 72%, transparent);
 }
@@ -501,6 +571,7 @@ main {
 .item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 7px 8px 7px 6px;
   background: var(--surface);
@@ -508,6 +579,54 @@ main {
   border-radius: 12px;
 }
 .item:hover { border-color: var(--line); }
+
+/* Subtasks hang under their own thing, inside the same row, so a broken-down
+   task still reads as one entry in the list. */
+.subs {
+  list-style: none;
+  width: 100%;
+  margin: 0 0 2px;
+  padding: 6px 0 0 34px;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.subs li { display: flex; align-items: center; gap: 8px; }
+.subs .check { width: 22px; height: 22px; border-radius: 7px; font-size: 0.75rem; }
+.subs .text { font-size: 0.9375rem; padding: 4px 2px; }
+.subs .kill { min-width: 28px; min-height: 28px; font-size: 0.9375rem; }
+.subs li.checked .text { color: var(--muted); text-decoration: line-through; }
+.subs .sub-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  background: var(--surface-2);
+  border: 1px solid var(--list-color, var(--accent));
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.9375rem;
+}
+.subs .sub-input::placeholder { color: #6d7688; }
+
+.item .count {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.item .addsub {
+  min-width: 32px; min-height: 32px;
+  flex: none;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  color: #6d7688;
+  font-size: 1.125rem;
+  line-height: 1;
+}
+.item .addsub:hover { color: var(--text); background: var(--surface-2); }
 
 .check {
   width: 30px; height: 30px;
@@ -613,6 +732,9 @@ main {
 }
 
 .detail-foot { margin-top: auto; padding-top: 26px; display: flex; gap: 10px; }
+
+.sheet { display: flex; flex-direction: column; gap: 8px; }
+.sheet .btn { width: 100%; text-align: left; padding: 0 16px; }
 
 /* ---------- Dialogs ---------- */
 
@@ -1114,11 +1236,15 @@ dialog select:focus { border-color: var(--accent); outline: none; }
 
         <button id="pickBtn" class="pick-btn">Pick something<span>for me</span></button>
 
+        <!-- Outside the card on purpose: the card is what moves, and a verdict
+             that rides along with it leaves the screen exactly when it is read. -->
+        <span class="verdict skip" aria-hidden="true">SKIP</span>
+        <span class="verdict go" aria-hidden="true">DOING IT</span>
+
         <div id="card" class="card" role="group" aria-labelledby="cardWhat" tabindex="-1" hidden>
-          <span class="verdict skip" aria-hidden="true">SKIP</span>
-          <span class="verdict go" aria-hidden="true">DOING IT</span>
           <div id="cardFrom" class="from"><span class="dot"></span><span></span></div>
           <div id="cardWhat" class="what"></div>
+          <ul id="cardSubs" class="card-subs" hidden></ul>
           <div id="cardMeta" class="meta"></div>
           <div class="actions">
             <button id="skipBtn" class="btn">Skip</button>
@@ -1154,13 +1280,16 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     <!-- ============ LIST DETAIL ============ -->
     <section id="screenList" class="screen" aria-labelledby="detailTitle" hidden>
       <div class="detail-head">
-        <div id="detailTitle" class="title"><span class="dot"></span><span></span></div>
+        <div class="detail-title-row">
+          <div id="detailTitle" class="title"><span class="dot"></span><span></span></div>
+          <button id="listOptionsBtn" class="options-btn" aria-label="Options for this list" title="List options">&#8943;</button>
+        </div>
         <div id="detailKind" class="kind"></div>
         <div id="detailProgress" hidden>
           <div class="progress"><i id="detailProgressFill"></i></div>
           <div class="progress-meta">
             <span id="detailProgressText"></span>
-            <button type="button" id="untickAllBtn">Untick all</button>
+            <button type="button" id="uncheckAllBtn">Uncheck all</button>
           </div>
         </div>
       </div>
@@ -1174,11 +1303,6 @@ dialog select:focus { border-color: var(--accent); outline: none; }
           <button id="clearDoneBtn" type="button">Clear</button>
         </div>
         <ul id="doneItems" class="items"></ul>
-      </div>
-
-      <div class="detail-foot">
-        <button id="editListBtn" class="btn">Edit list</button>
-        <button id="deleteListBtn" class="btn danger">Delete list</button>
       </div>
 
       <form id="addForm" class="add-row">
@@ -1215,6 +1339,20 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   <button id="toastAction" type="button" hidden></button>
 </div>
 
+<dialog id="actionsDialog" aria-labelledby="actionsTitle">
+  <div class="dlg-body">
+    <h2 id="actionsTitle">List options</h2>
+    <p class="dlg-sub" id="actionsSub"></p>
+    <div class="sheet">
+      <button type="button" class="btn" id="actionsEdit">Edit name, kind and colour</button>
+      <button type="button" class="btn danger" id="actionsDelete">Delete this list</button>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" class="btn ghost" id="actionsCancel">Cancel</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="listDialog" aria-labelledby="listDialogTitle">
   <form method="dialog" class="dlg-body" id="listForm">
     <h2 id="listDialogTitle">New list</h2>
@@ -1228,7 +1366,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     <div class="field" id="kindField">
       <span>How does finishing work?</span>
       <div class="segmented" role="radiogroup" aria-label="Kind of list">
-        <label><input type="radio" name="kind" value="once" checked><span>Tick off</span></label>
+        <label><input type="radio" name="kind" value="once" checked><span>Check off</span></label>
         <label><input type="radio" name="kind" value="endless"><span>Ongoing</span></label>
       </div>
       <p class="seg-note" id="kindDesc"></p>
@@ -1236,7 +1374,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     </div>
 
     <div class="field" id="keepField">
-      <span>Once something's ticked off</span>
+      <span>Once something's checked off</span>
       <div class="segmented" role="radiogroup" aria-label="What happens to finished things">
         <label><input type="radio" name="keep" value="clear" checked><span>Move it away</span></label>
         <label><input type="radio" name="keep" value="record"><span>Keep it listed</span></label>
@@ -1378,7 +1516,8 @@ dialog select:focus { border-color: var(--accent); outline: none; }
 
   const {
     STORE_KEY, COLORS, KIND_LABEL,
-    emptyState, migrate, newItem, newList, setDone, logSession,
+    emptyState, migrate, newItem, newSub, newList, logSession,
+    setDoneWithSubs, syncFromSubs, subsDone,
     pickableCount, plural, relativeDay, listSummary,
   } = L;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -1392,7 +1531,10 @@ dialog select:focus { border-color: var(--accent); outline: none; }
 
   // The state shape and what each field means live in logic.js, which owns them.
   let state = emptyState();
-  let ui = { tab: 'decide', openListId: null, editingListId: null, draftColor: COLORS[0] };
+  let ui = {
+    tab: 'decide', openListId: null, editingListId: null, actionsListId: null,
+    addingSubTo: null, subDraft: '', draftColor: COLORS[0],
+  };
   let session = { shown: new Set(), current: null, settled: false, gen: 0 };
   let pendingUndo = null;
   let toastTimer = 0;
@@ -1544,6 +1686,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   }
 
   function openList(id) {
+    closeSubInput();
     ui.openListId = id;
     ui.tab = 'lists';
     // A history entry so Android's back gesture leaves the list rather than the
@@ -1560,6 +1703,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
 
   window.addEventListener('popstate', () => {
     if (!ui.openListId) return;
+    closeSubInput();
     ui.openListId = null;
     renderAll();
   });
@@ -1701,6 +1845,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       const card = document.createElement('button');
       card.type = 'button';
       paintColor(card, 'list-card', list.color);
+      attachLongPress(card, () => openListActions(list));
       card.addEventListener('click', () => openList(list.id));
 
       const body = document.createElement('div');
@@ -1747,12 +1892,12 @@ dialog select:focus { border-color: var(--accent); outline: none; }
 
     $('detailKind').textContent = list.kind === 'endless'
       ? 'Ongoing · nothing is ever finished, it just gets done again'
-      : 'Tick off · ' + (list.keepDone ? 'ticked things stay put as a record' : 'finished things move out of the way');
+      : 'Check off · ' + (list.keepDone ? 'checked things stay put as a record' : 'finished things move out of the way');
 
     paintColor($('screenList'), 'screen', list.color);
     $('addInput').placeholder = list.kind === 'endless'
       ? 'Add something you keep coming back to'
-      : 'Add something to tick off';
+      : 'Add something to check off';
 
     // Where finished items sit is the only thing keepDone changes: kept in place
     // among the rest, or swept into the Done pile below.
@@ -1771,7 +1916,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     } else if (!pickableCount(list)) {
       emptyMsg.hidden = false;
       emptyMsg.textContent = list.keepDone
-        ? 'Every one ticked off. Nothing left for Unstuck to pick here.'
+        ? 'Every one checked off. Nothing left for Unstuck to pick here.'
         : 'All clear. Nothing left in this list.';
     } else {
       emptyMsg.hidden = true;
@@ -1792,25 +1937,25 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     if (!show) return;
     $('detailProgressFill').style.width = Math.round((doneCount / list.items.length) * 100) + '%';
     $('detailProgressText').textContent = doneCount + ' of ' + list.items.length + ' done';
-    // Only a record keeps its ticks on screen, so only it can untick them here;
+    // Only a record keeps its checks on screen, so only it can uncheck them here;
     // a sweeping list clears its Done pile instead.
-    $('untickAllBtn').hidden = !list.keepDone || doneCount === 0;
+    $('uncheckAllBtn').hidden = !list.keepDone || doneCount === 0;
   }
 
-  function untickAll(list) {
+  function uncheckAll(list) {
     const wasDone = list.items.filter((it) => it.done).map((it) => ({ item: it, was: completionOf(it) }));
     if (!wasDone.length) return;
-    wasDone.forEach(({ item }) => setDone(item, false));
+    wasDone.forEach(({ item }) => setDoneWithSubs(item, false));
     save();
     renderAll();
-    toast('Unticked ' + plural(wasDone.length, 'thing', 'things'), () => {
-      wasDone.forEach(({ item, was }) => Object.assign(item, was));
+    toast('Unchecked ' + plural(wasDone.length, 'thing', 'things'), () => {
+      wasDone.forEach(({ item, was }) => restoreCompletion(item, was));
     });
   }
 
-  $('untickAllBtn').addEventListener('click', () => {
+  $('uncheckAllBtn').addEventListener('click', () => {
     const list = listById(ui.openListId);
-    if (list) untickAll(list);
+    if (list) uncheckAll(list);
   });
 
   function renderItems(container, list, items) {
@@ -1825,6 +1970,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     // An ongoing list has no notion of finished, so it never strikes anything out
     // even though `done` is still carried underneath for the other kinds.
     row.className = 'item' + (item.done && list.kind !== 'endless' ? ' checked' : '');
+    row.dataset.item = item.id;
 
     if (list.kind === 'endless') {
       const tally = document.createElement('button');
@@ -1835,6 +1981,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       tally.setAttribute('aria-label', 'Log another session of ' + item.text + '. Done ' + plural(item.count, 'time', 'times') + ' so far.');
       tally.addEventListener('click', () => {
         logSession(item);
+        L.setSubsDone(item, false);
         save();
         renderAll();
         toast('Logged. That’s ' + plural(item.count, 'time', 'times') + '.');
@@ -1849,7 +1996,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       check.setAttribute('aria-label', item.text);
       check.textContent = item.done ? '✓' : '';
       check.addEventListener('click', () => {
-        setDone(item, !item.done);
+        setDoneWithSubs(item, !item.done);
         save();
         renderAll();
       });
@@ -1865,6 +2012,14 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     text.addEventListener('click', () => beginEdit(row, text, item));
     row.appendChild(text);
 
+    if (item.subs.length) {
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = subsDone(item) + '/' + item.subs.length;
+      count.setAttribute('aria-label', subsDone(item) + ' of ' + item.subs.length + ' subtasks done');
+      row.appendChild(count);
+    }
+
     if (list.kind === 'endless' && item.lastDone) {
       const when = document.createElement('span');
       when.className = 'when';
@@ -1877,6 +2032,15 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       row.appendChild(when);
     }
 
+    const addSub = document.createElement('button');
+    addSub.type = 'button';
+    addSub.className = 'addsub';
+    addSub.textContent = '+';
+    addSub.title = 'Add a subtask';
+    addSub.setAttribute('aria-label', 'Add a subtask to: ' + item.text);
+    addSub.addEventListener('click', () => beginAddSub(item));
+    row.appendChild(addSub);
+
     const kill = document.createElement('button');
     kill.type = 'button';
     kill.className = 'kill';
@@ -1885,7 +2049,174 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     kill.addEventListener('click', () => deleteItem(list, item));
     row.appendChild(kill);
 
+    const adding = ui.addingSubTo === item.id;
+    if (item.subs.length || adding) {
+      const box = renderSubs(list, item);
+      if (adding) box.appendChild(subInputRow(item));
+      row.appendChild(box);
+    }
+
     return row;
+  }
+
+  function renderSubs(list, item) {
+    const box = document.createElement('ul');
+    box.className = 'subs';
+    for (const sub of item.subs) {
+      const li = document.createElement('li');
+      li.className = sub.done ? 'checked' : '';
+
+      const check = document.createElement('button');
+      check.type = 'button';
+      check.className = 'check';
+      check.setAttribute('role', 'checkbox');
+      check.setAttribute('aria-checked', String(sub.done));
+      check.setAttribute('aria-label', sub.text);
+      check.textContent = sub.done ? '✓' : '';
+      check.addEventListener('click', () => toggleSub(list, item, sub));
+      li.appendChild(check);
+
+      const text = document.createElement('button');
+      text.type = 'button';
+      text.className = 'text';
+      text.textContent = sub.text;
+      text.title = 'Tap to edit';
+      text.setAttribute('aria-label', 'Edit subtask: ' + sub.text);
+      text.addEventListener('click', () => beginEdit(li, text, sub));
+      li.appendChild(text);
+
+      const kill = document.createElement('button');
+      kill.type = 'button';
+      kill.className = 'kill';
+      kill.textContent = '×';
+      kill.setAttribute('aria-label', 'Delete subtask: ' + sub.text);
+      kill.addEventListener('click', () => deleteSub(list, item, sub));
+      li.appendChild(kill);
+
+      box.appendChild(li);
+    }
+    return box;
+  }
+
+  /**
+   * Which row is taking a subtask, and what has been typed into it, are both
+   * render state rather than a loose node in the DOM. Re-rendering the list is
+   * routine here, and it destroys the field: keeping the draft outside it means
+   * a redraw costs nothing, and a blur fired by our own removal can be ignored.
+   */
+  function beginAddSub(item) {
+    // Half-typed text belongs to the row it was typed on, not the new one.
+    if (ui.addingSubTo !== item.id) saveSubDraft();
+    ui.addingSubTo = item.id;
+    ui.subDraft = '';
+    renderAndFocusSub();
+  }
+
+  /**
+   * Redrawing the list blurs the field it has just removed, and that blur
+   * arrives while the old node still reads as connected. Anything the field
+   * reports during a redraw is therefore the redraw talking, not the person:
+   * without this, filing one subtask files it twice and then closes the row.
+   */
+  let redrawingSubs = false;
+
+  function renderAndFocusSub() {
+    redrawingSubs = true;
+    try {
+      renderAll();
+      const input = $('screenList').querySelector('.sub-input');
+      if (input) input.focus();
+    } finally {
+      redrawingSubs = false;
+    }
+  }
+
+  /** Files the open draft, if there is one, against the row it was typed on. */
+  function saveSubDraft() {
+    // While the field is on screen it is the truth; the stored draft is what
+    // survives the redraws that take it away.
+    const live = $('screenList').querySelector('.sub-input');
+    if (live) ui.subDraft = live.value;
+    const text = ui.subDraft.trim();
+    ui.subDraft = '';
+    if (!text || !ui.addingSubTo) return;
+    const list = listById(ui.openListId);
+    const item = list && list.items.find((it) => it.id === ui.addingSubTo);
+    if (!item) return;
+    item.subs.push(newSub(text));
+    // A fresh step means the thing is not finished after all.
+    syncFromSubs(list, item);
+    save();
+  }
+
+  function closeSubInput() {
+    saveSubDraft();
+    ui.addingSubTo = null;
+  }
+
+  /**
+   * Subtasks go in one after another the way the add row takes items, rather
+   * than a round trip through the list per step: breaking something down is a
+   * burst, not a series of decisions.
+   */
+  function subInputRow(item) {
+    const holder = document.createElement('li');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'sub-input';
+    input.maxLength = 200;
+    input.placeholder = 'Add a subtask';
+    input.value = ui.subDraft;
+    input.setAttribute('aria-label', 'New subtask for ' + item.text);
+
+    const commit = (keep, again) => {
+      if (redrawingSubs) return;
+      if (keep) saveSubDraft(); else ui.subDraft = '';
+      ui.addingSubTo = again ? item.id : null;
+      renderAndFocusSub();
+    };
+
+    input.addEventListener('input', () => { ui.subDraft = input.value; });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(true, true); }
+      else if (e.key === 'Escape') { e.preventDefault(); commit(false, false); }
+    });
+    input.addEventListener('blur', () => commit(true, false));
+
+    holder.appendChild(input);
+    return holder;
+  }
+
+  function toggleSub(list, item, sub) {
+    const before = completionOf(item);
+    sub.done = !sub.done;
+    const finished = syncFromSubs(list, item);
+    save();
+
+    const onCard = Boolean(session.current) && session.current.item.id === item.id && session.settled;
+    if (finished && onCard) {
+      concludeAccept(list, item, acceptMessage(list, item), before);
+      renderAll();
+      return;
+    }
+    renderAll();
+    if (session.current && session.current.item.id === item.id) renderCardSubs(list, item);
+  }
+
+  function deleteSub(list, item, sub) {
+    const at = item.subs.indexOf(sub);
+    if (at === -1) return;
+    const before = completionOf(item);
+    item.subs.splice(at, 1);
+    // Removing the last unfinished step can finish the thing, so the rule reruns.
+    syncFromSubs(list, item);
+    save();
+    renderAll();
+    if (session.current && session.current.item.id === item.id) renderCardSubs(list, item);
+    toast('Deleted “' + sub.text + '”', () => {
+      item.subs.splice(at, 0, sub);
+      restoreCompletion(item, before);
+    });
   }
 
   function beginEdit(row, textBtn, item) {
@@ -1958,23 +2289,98 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     });
   });
 
-  $('deleteListBtn').addEventListener('click', () => {
-    const list = listById(ui.openListId);
-    if (!list) return;
+  function deleteList(list) {
     const at = state.lists.indexOf(list);
+    if (at === -1) return;
     const selectedAt = state.selection.indexOf(list.id);
     state.lists.splice(at, 1);
     if (selectedAt !== -1) state.selection.splice(selectedAt, 1);
     if (session.current && session.current.list.id === list.id) closeCard();
-    closeListDetail();
-    ui.openListId = null;
+    if (ui.openListId === list.id) {
+      closeListDetail();
+      ui.openListId = null;
+    }
     save();
     renderAll();
     toast('Deleted “' + list.name + '” and everything in it', () => {
       state.lists.splice(at, 0, list);
       if (selectedAt !== -1) state.selection.splice(selectedAt, 0, list.id);
     });
+  }
+
+  // ---------------------------------------------------------- list options
+
+  /**
+   * Everything that acts on a whole list lives behind this one sheet, reached the
+   * same way from either screen: a long press on the list, or the ⋯ beside its
+   * title. Nothing that edits a list sits next to the row that adds to one.
+   */
+  function openListActions(list) {
+    ui.actionsListId = list.id;
+    $('actionsSub').textContent = list.name;
+    $('actionsDialog').showModal();
+  }
+
+  $('listOptionsBtn').addEventListener('click', () => {
+    const list = listById(ui.openListId);
+    if (list) openListActions(list);
   });
+
+  $('actionsCancel').addEventListener('click', () => $('actionsDialog').close());
+
+  $('actionsEdit').addEventListener('click', () => {
+    const list = listById(ui.actionsListId);
+    $('actionsDialog').close();
+    if (list) openListDialog(list);
+  });
+
+  $('actionsDelete').addEventListener('click', () => {
+    const list = listById(ui.actionsListId);
+    $('actionsDialog').close();
+    if (list) deleteList(list);
+  });
+
+  const LONG_PRESS_MS = 480;
+
+  /**
+   * A held press opens `run` and the following click is swallowed, so a long
+   * press on a list never also opens it. Registered before the element's own
+   * click handler, which is what lets it stop the open from firing.
+   */
+  function attachLongPress(el, run) {
+    let timer = 0;
+    let startX = 0;
+    let startY = 0;
+    let fired = false;
+    const cancel = () => { clearTimeout(timer); timer = 0; };
+
+    el.addEventListener('click', (e) => {
+      if (!fired) return;
+      fired = false;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    });
+
+    el.addEventListener('pointerdown', (e) => {
+      fired = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      timer = setTimeout(() => { timer = 0; fired = true; run(); }, LONG_PRESS_MS);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (timer && (Math.abs(e.clientX - startX) > 10 || Math.abs(e.clientY - startY) > 10)) cancel();
+    });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, cancel);
+
+    // The platform's own long press, and a right click on a desktop.
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      cancel();
+      if (fired) return;
+      fired = true;
+      run();
+    });
+  }
 
   // ----------------------------------------------------------- list dialog
 
@@ -2234,13 +2640,13 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   /** An ongoing list never finishes anything, so neither display choice applies. */
   function syncKeepField() {
     const kind = document.querySelector('input[name="kind"]:checked');
-    const ticks = Boolean(kind) && kind.value === 'once';
-    $('keepField').hidden = !ticks;
-    $('progressField').hidden = !ticks;
+    const checks = Boolean(kind) && kind.value === 'once';
+    $('keepField').hidden = !checks;
+    $('progressField').hidden = !checks;
 
     // The segmented buttons are short by design, so spell out what each means.
     // This one describes both kinds, so it is set before the early return below.
-    $('kindDesc').textContent = ticks
+    $('kindDesc').textContent = checks
       ? 'Finishing something takes it out of the hat. Chores, books, errands.'
       : 'Never finished, just done again — each pick logs a session.';
 
@@ -2249,9 +2655,9 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     const switching = Boolean(editing) && Boolean(kind) && kind.value !== editing.kind;
     const note = $('kindNote');
     note.hidden = !switching;
-    if (switching) note.textContent = 'Switching keeps everything — ticks and session counts both survive.';
+    if (switching) note.textContent = 'Switching keeps everything — checks and session counts both survive.';
 
-    if (!ticks) return;
+    if (!checks) return;
 
     const keep = document.querySelector('input[name="keep"]:checked');
     $('keepNote').textContent = keep && keep.value === 'record'
@@ -2278,10 +2684,6 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   $('listTimer').addEventListener('change', syncListTimerNote);
 
   $('newListBtn').addEventListener('click', () => openListDialog(null));
-  $('editListBtn').addEventListener('click', () => {
-    const list = listById(ui.openListId);
-    if (list) openListDialog(list);
-  });
   $('listCancel').addEventListener('click', () => $('listDialog').close());
 
   $('listForm').addEventListener('submit', (e) => {
@@ -2431,6 +2833,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     card.style.transform = '';
     card.style.opacity = '';
     card.classList.remove('done-state');
+    $('cardSubs').hidden = true;
     setVerdict(0);
   }
 
@@ -2469,6 +2872,9 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     $('doBtn').textContent = 'I’m doing it';
     $('swipeHint').textContent = swipeHintText();
     $('timerOffer').hidden = true;
+    // Held back until the riffle lands, so it never shows the steps of a card
+    // that is still flickering through other candidates.
+    $('cardSubs').hidden = true;
 
     if (motionOff()) {
       settleOn(item.text);
@@ -2504,10 +2910,42 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     requestAnimationFrame(frame);
   }
 
+  function renderCardSubs(list, item) {
+    const box = $('cardSubs');
+    box.textContent = '';
+    box.hidden = item.subs.length === 0;
+    if (!item.subs.length) return;
+
+    for (const sub of item.subs) {
+      const li = document.createElement('li');
+      const step = document.createElement('button');
+      step.type = 'button';
+      step.className = 'step';
+      step.setAttribute('role', 'checkbox');
+      step.setAttribute('aria-checked', String(sub.done));
+
+      const box2 = document.createElement('span');
+      box2.className = 'box';
+      box2.setAttribute('aria-hidden', 'true');
+      box2.textContent = sub.done ? '✓' : '';
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = sub.text;
+
+      step.appendChild(box2);
+      step.appendChild(label);
+      step.addEventListener('click', () => toggleSub(list, item, sub));
+      li.appendChild(step);
+      box.appendChild(li);
+    }
+  }
+
   function settleOn(text) {
     const card = $('card');
     const what = $('cardWhat');
     what.textContent = text;
+    renderCardSubs(session.current.list, session.current.item);
     session.settled = true;
     card.classList.remove('settling');
     void card.offsetWidth;
@@ -2517,9 +2955,29 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     speakPick(text + ', from ' + session.current.list.name);
   }
 
-  /** The four fields that together record how often something has been finished. */
+  /** Everything a completion moves, so undo can put all of it back at once. */
   function completionOf(item) {
-    return { done: item.done, doneAt: item.doneAt, count: item.count, lastDone: item.lastDone };
+    return {
+      done: item.done, doneAt: item.doneAt, count: item.count, lastDone: item.lastDone,
+      subs: item.subs.map((s) => s.done),
+    };
+  }
+
+  function restoreCompletion(item, snapshot) {
+    item.done = snapshot.done;
+    item.doneAt = snapshot.doneAt;
+    item.count = snapshot.count;
+    item.lastDone = snapshot.lastDone;
+    snapshot.subs.forEach((was, i) => { if (item.subs[i]) item.subs[i].done = was; });
+  }
+
+  function acceptMessage(list, item) {
+    if (list.kind === 'endless') return 'Logged — that’s ' + plural(item.count, 'time', 'times') + '.';
+    if (list.showProgress) {
+      const done = list.items.filter((it) => it.done).length;
+      return 'Checked off — ' + done + ' of ' + list.items.length + '.';
+    }
+    return 'Done. Nice one.';
   }
 
   function accept() {
@@ -2528,22 +2986,20 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     // Restoring the exact prior state beats inverting the operation: accepting
     // touches all four completion fields, and they no longer move independently.
     const before = completionOf(item);
-    let message;
 
     if (list.kind === 'endless') {
       logSession(item);
-      message = 'Logged — that’s ' + plural(item.count, 'time', 'times') + '.';
+      L.setSubsDone(item, false);
     } else {
-      setDone(item, true);
-      if (list.showProgress) {
-        const done = list.items.filter((it) => it.done).length;
-        message = 'Ticked off — ' + done + ' of ' + list.items.length + '.';
-      } else {
-        message = 'Done. Nice one.';
-      }
+      setDoneWithSubs(item, true);
     }
 
     save();
+    concludeAccept(list, item, acceptMessage(list, item), before);
+  }
+
+  /** The part of accepting that is the same whether a swipe or the last subtask did it. */
+  function concludeAccept(list, item, message, before) {
     showAccepted(message);
 
     // A list with a standing timer starts it here: that is the whole point of
@@ -2554,7 +3010,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     }
     renderTimerOffer(list);
 
-    toast(message, () => { Object.assign(item, before); closeCard(); });
+    toast(message, () => { restoreCompletion(item, before); closeCard(); });
   }
 
   function showAccepted(message) {
@@ -2563,6 +3019,8 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     card.style.opacity = '';
     card.classList.add('done-state');
     setVerdict(0);
+    // The checklist has done its job; the message below says how it landed.
+    $('cardSubs').hidden = true;
     $('cardMeta').textContent = message;
     $('skipBtn').hidden = true;
     $('doBtn').hidden = false;
@@ -2773,10 +3231,12 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   let drag = null;
 
   function setVerdict(dx) {
-    const card = $('card');
-    const skip = card.querySelector('.verdict.skip');
-    const go = card.querySelector('.verdict.go');
-    const strength = Math.min(1, Math.abs(dx) / SWIPE_TRIGGER);
+    const stage = $('stage');
+    const skip = stage.querySelector('.verdict.skip');
+    const go = stage.querySelector('.verdict.go');
+    // Full strength well before the card commits, so the word is already legible
+    // by the time the swipe is worth reading.
+    const strength = Math.min(1, Math.abs(dx) / (SWIPE_TRIGGER * 0.45));
     skip.style.opacity = dx < 0 ? String(strength) : '0';
     go.style.opacity = dx > 0 ? String(strength) : '0';
   }

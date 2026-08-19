@@ -90,7 +90,7 @@ test('a schema 1 collection keeps its record and its progress bar', () => {
     { kind: 'once', keepDone: true, showProgress: true },
     'a collection was exactly these two display choices switched on'
   );
-  assert.equal(out.lists[0].items[0].done, true, 'ticks must survive the migration');
+  assert.equal(out.lists[0].items[0].done, true, 'checks must survive the migration');
 });
 
 test('a legacy kind cannot be overridden by stray display fields in the file', () => {
@@ -360,7 +360,7 @@ test('an endless list keeps its items in the pool even when flagged done', () =>
   assert.equal(L.pickableCount(endless), 1);
 });
 
-test('a tick-off list drops done items from the pool however it displays them', () => {
+test('a check-off list drops done items from the pool however it displays them', () => {
   // The display choices must be invisible to the picker — that is the whole
   // reason they stopped being separate kinds.
   for (const display of [{}, { keepDone: true }, { showProgress: true }, { keepDone: true, showProgress: true }]) {
@@ -551,7 +551,7 @@ test('cardMeta explains where the picked item sits in its list', () => {
   assert.equal(L.cardMeta(todo, todo.items[0], now), '2 things left in this list.');
 
   const books = list('C', 'once', [item('a', { done: true }), item('b')], { showProgress: true });
-  assert.equal(L.cardMeta(books, books.items[1], now), '1 of 2 ticked off so far.');
+  assert.equal(L.cardMeta(books, books.items[1], now), '1 of 2 checked off so far.');
 
   const fresh = list('O', 'endless', [item('guitar')]);
   assert.equal(L.cardMeta(fresh, fresh.items[0], now), 'You have not logged this one yet.');
@@ -605,15 +605,15 @@ test('a starter list survives the save/load round-trip unchanged', () => {
 
 // ------------------------------------------------- done and count in step
 
-test('ticking something off counts as one completion', () => {
+test('checking something off counts as one completion', () => {
   const it = item('read it');
   L.setDone(it, true, 1000);
   assert.equal(it.done, true);
-  assert.equal(it.count, 1, 'an ongoing view must not read zero for a ticked item');
+  assert.equal(it.count, 1, 'an ongoing view must not read zero for a checked item');
   assert.equal(it.lastDone, 1000);
 });
 
-test('a ticked item shows one session once the list becomes ongoing', () => {
+test('a checked item shows one session once the list becomes ongoing', () => {
   const l = list('Books', 'once', [item('Piranesi')]);
   L.setDone(l.items[0], true, 1000);
   l.kind = 'endless';
@@ -621,40 +621,40 @@ test('a ticked item shows one session once the list becomes ongoing', () => {
   assert.equal(L.listSummary(l), '1 thing · 1 session logged');
 });
 
-test('unticking withdraws the completion the tick implied', () => {
+test('unchecking withdraws the completion the check implied', () => {
   const it = item('read it');
   L.setDone(it, true, 1000);
   L.setDone(it, false, 2000);
   assert.equal(it.done, false);
-  assert.equal(it.count, 0, 'the implied session must go with the tick');
+  assert.equal(it.count, 0, 'the implied session must go with the check');
   assert.equal(it.lastDone, 0);
 });
 
-test('unticking never destroys a tally built from real sessions', () => {
+test('unchecking never destroys a tally built from real sessions', () => {
   const it = item('guitar');
   for (let i = 0; i < 10; i++) L.logSession(it, 1000 + i);
   L.setDone(it, false, 3000);
   assert.equal(it.done, false);
-  assert.equal(it.count, 10, 'ten logged sessions must survive an untick');
+  assert.equal(it.count, 10, 'ten logged sessions must survive an uncheck');
 });
 
-test('logging a session also marks it finished for the tick views', () => {
+test('logging a session also marks it finished for the check views', () => {
   const it = item('guitar');
   L.logSession(it, 1000);
   assert.equal(it.count, 1);
-  assert.equal(it.done, true, 'switching to a tick view must show it ticked');
+  assert.equal(it.done, true, 'switching to a check view must show it checked');
   assert.equal(it.doneAt, 1000);
 });
 
-test('the full journey: tick, switch to ongoing, log up to ten, switch back', () => {
+test('the full journey: check, switch to ongoing, log up to ten, switch back', () => {
   const l = list('Practice', 'once', [item('guitar')]);
   const it = l.items[0];
 
   L.setDone(it, true, 1000);
-  assert.equal(L.pickableCount(l), 0, 'ticked, so out of the pool');
+  assert.equal(L.pickableCount(l), 0, 'checked, so out of the pool');
 
   l.kind = 'endless';
-  assert.equal(it.count, 1, 'the tick reads as one session');
+  assert.equal(it.count, 1, 'the check reads as one session');
   assert.equal(L.pickableCount(l), 1, 'ongoing items are always pickable');
 
   for (let i = 2; i <= 10; i++) L.logSession(it, 1000 + i);
@@ -681,18 +681,18 @@ test('a never-touched item stays at zero under every kind', () => {
 
 // ----------------------------------------------------------- kind changes
 
-test('switching a list to ongoing returns its ticked items to the pool', () => {
+test('switching a list to ongoing returns its checked items to the pool', () => {
   const l = list('Books', 'once', [item('read it', { done: true, doneAt: 123 }), item('unread')]);
   assert.equal(L.pickableCount(l), 1);
   l.kind = 'endless';
   assert.equal(L.pickableCount(l), 2, 'an ongoing list has no unpickable items');
 });
 
-test('switching back from ongoing restores the ticks exactly', () => {
+test('switching back from ongoing restores the checks exactly', () => {
   const l = list('Books', 'once', [item('read it', { done: true, doneAt: 123 }), item('unread')]);
   l.kind = 'endless';
   l.kind = 'once';
-  assert.equal(L.pickableCount(l), 1, 'the tick must survive the round trip');
+  assert.equal(L.pickableCount(l), 1, 'the check must survive the round trip');
   assert.equal(l.items[0].doneAt, 123, 'when it was done must survive too');
 });
 
@@ -721,6 +721,126 @@ test('a list reads correctly under each kind without touching its items', () => 
     progress: '1 of 2 done',
     ongoing: '2 things · 2 sessions logged',
   });
+});
+
+// -------------------------------------------------------------- subtasks
+
+const withSubs = (it, ...texts) => {
+  it.subs = texts.map((t) => L.newSub(t));
+  return it;
+};
+
+test('migrate coerces subtasks and drops the unusable ones', () => {
+  const out = L.migrate({
+    lists: [{
+      name: 'X', kind: 'once',
+      items: [{
+        text: 'Sort the pile',
+        subs: [
+          { id: 's1', text: 'Clothes away', done: 'yes' },
+          { text: '   ' },
+          null,
+          'not an object',
+          { text: 42 },
+        ],
+      }],
+    }],
+  });
+  const subs = out.lists[0].items[0].subs;
+  assert.equal(subs.length, 2, 'blank, null and non-object steps must be dropped');
+  assert.deepEqual(subs[0], { id: 's1', text: 'Clothes away', done: true });
+  assert.equal(subs[1].text, '42');
+  assert.ok(subs[1].id, 'a step without an id must be given one');
+});
+
+test('a payload with no subtasks at all still loads', () => {
+  const out = L.migrate({ schema: 2, lists: [{ name: 'X', kind: 'once', items: [{ text: 'Thing' }] }] });
+  assert.deepEqual(out.lists[0].items[0].subs, [], 'a missing subs field is an empty list, not undefined');
+});
+
+test('subtasks never enter the pool — only the thing that owns them', () => {
+  const l = list('House', 'once', [withSubs(item('Sort the pile'), 'Clothes away', 'Hoover')]);
+  const drawn = L.pool(stateWith([l]));
+  assert.equal(drawn.length, 1);
+  assert.equal(drawn[0].item.text, 'Sort the pile');
+});
+
+test('checking the last subtask finishes the thing', () => {
+  const l = list('House', 'once', [withSubs(item('Sort the pile'), 'a', 'b')]);
+  const it = l.items[0];
+
+  it.subs[0].done = true;
+  assert.equal(L.syncFromSubs(l, it, 1000), false, 'a part-done thing is not finished');
+  assert.equal(it.done, false);
+
+  it.subs[1].done = true;
+  assert.equal(L.syncFromSubs(l, it, 2000), true);
+  assert.equal(it.done, true);
+  assert.equal(it.doneAt, 2000);
+  assert.equal(it.count, 1, 'finishing it counts as one completion, same as a check');
+});
+
+test('reopening one subtask reopens the thing and leaves its siblings alone', () => {
+  const l = list('House', 'once', [withSubs(item('Sort the pile'), 'a', 'b')]);
+  const it = l.items[0];
+  L.setSubsDone(it, true);
+  L.syncFromSubs(l, it, 2000);
+
+  it.subs[0].done = false;
+  assert.equal(L.syncFromSubs(l, it, 3000), false);
+  assert.equal(it.done, false, 'an unfinished step means an unfinished thing');
+  assert.equal(it.subs[1].done, true, 'the other steps must not be swept along with it');
+  assert.equal(L.pickableCount(l), 1, 'and it is back in the pool');
+});
+
+test('checking the thing itself settles all of its subtasks', () => {
+  const l = list('House', 'once', [withSubs(item('Sort the pile'), 'a', 'b')]);
+  const it = l.items[0];
+  L.setDoneWithSubs(it, true, 1000);
+  assert.deepEqual(it.subs.map((s) => s.done), [true, true]);
+
+  L.setDoneWithSubs(it, false, 2000);
+  assert.deepEqual(it.subs.map((s) => s.done), [false, false]);
+  assert.equal(it.done, false);
+});
+
+test('an ongoing thing logs a session when its steps are done, then clears them', () => {
+  const l = list('Creative', 'endless', [withSubs(item('Practise'), 'scales', 'the piece')]);
+  const it = l.items[0];
+  L.setSubsDone(it, true);
+
+  assert.equal(L.syncFromSubs(l, it, 5000), true);
+  assert.equal(it.count, 1);
+  assert.equal(it.lastDone, 5000);
+  assert.deepEqual(it.subs.map((s) => s.done), [false, false], 'the steps reset for the next time round');
+
+  L.setSubsDone(it, true);
+  L.syncFromSubs(l, it, 6000);
+  assert.equal(it.count, 2, 'and it can be run through again');
+});
+
+test('a thing with no subtasks is never touched by the subtask rule', () => {
+  const l = list('House', 'once', ['Wash up']);
+  const it = l.items[0];
+  assert.equal(L.syncFromSubs(l, it, 1000), false);
+  assert.equal(it.done, false, 'no steps must not read as "every step done"');
+  assert.equal(L.allSubsDone(it), false);
+});
+
+test('subsDone counts what is checked', () => {
+  const it = withSubs(item('Thing'), 'a', 'b', 'c');
+  assert.equal(L.subsDone(it), 0);
+  it.subs[1].done = true;
+  assert.equal(L.subsDone(it), 1);
+  L.setSubsDone(it, true);
+  assert.equal(L.subsDone(it), 3);
+  assert.equal(L.allSubsDone(it), true);
+});
+
+test('subtasks survive a backup round-trip', () => {
+  const s = stateWith([list('House', 'once', [withSubs(item('Sort the pile'), 'a', 'b')])]);
+  s.lists[0].items[0].subs[0].done = true;
+  assert.deepEqual(L.migrate(JSON.parse(JSON.stringify(s))), s);
 });
 
 // ------------------------------------------------------------------ shape
