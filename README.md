@@ -25,7 +25,7 @@ the browser only — for a real "Add to Home Screen" install, host the folder on
 Netlify.
 
 **Editing gotcha:** `sw.js` is network-first, but browsers still cache aggressively. After an edit,
-hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v9`), or load with a `?v=N`
+hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v11`), or load with a `?v=N`
 cache-buster. If a change seems not to apply, this is almost always why.
 
 ## Layout
@@ -62,12 +62,12 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (114 checks, `node --test`, zero dependencies) — validation and coercion
+- **`tests/logic.test.js`** (115 checks, `node --test`, zero dependencies) — validation and coercion
   in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
   selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
   directions, every nest / move / promote / reorder, and the pick algorithm with an injected RNG so
   every branch is deterministic.
-- **`tests/dom.test.html`** (85 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/dom.test.html`** (88 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was checked, that a kind change keeps every item, that the two display switches are
@@ -94,7 +94,7 @@ item out of the pool — so there are only two:
 
 | Kind | For | Finishing something |
 |---|---|---|
-| **Check off** | chores, books, errands | takes it out of the hat |
+| **Check off** | chores, books, errands | stops it being picked |
 | **Ongoing** | practise guitar, go for a walk | never leaves — each pick logs a session (`3× · last Tuesday`) |
 
 Everything else is presentation, and each part is its own switch on a check-off list:
@@ -232,6 +232,18 @@ Settings (the gear) carries:
   setting changes while the app is open. The stylesheet only ever sees `high` or `normal`, because a
   third state in CSS would mean a second code path for the same two palettes.
 
+- **App colour** — the same eight swatches a list gets, plus the wheel, applied to everything the app
+  draws in its own colour. A list keeps its own colour; this is only the app's. One choice is stored;
+  the gradient's two ends (`--accent-lit`, `--accent-deep`) and the text that sits on it
+  (`--accent-ink`) are all derived from it, so a teal button can never keep an amber highlight or
+  unreadable text. The ink stays in the accent's hue family — which is why the amber default's label
+  is a warm brown rather than a flat black — and is checked to clear 4.5:1 against whatever you pick.
+
+The **colour wheel is one instance with two owners**: a list's colour and the app's. It lives in its
+own dialog, and whoever opens it passes in the colour to start from and what to do with the result.
+The box beside it takes `#rrggbb`, `#rgb`, or `rgb()`/`rgba()` — alpha is dropped, because a
+translucent accent would take whatever sits behind it and no contrast floor could hold.
+
 Two things are enforced rather than offered, since an option nobody finds is not accessibility:
 
 - **A list colour that cannot be read is lifted where it is text.** The colour wheel's brightness
@@ -297,9 +309,14 @@ and reach full strength at 45% of the trigger distance so the word is legible we
 commits.
 
 Everything that acts on a whole list — edit, delete — lives behind one sheet, reached either by
-**holding** a list in the grid or by the **⋯** beside its title. Nothing that edits a list sits next
-to the row that adds to one; a held press swallows the click that follows it, so holding a list never
-also opens it.
+**holding** a list in the grid or by the **⋯ Options** pill beside its title. Nothing that edits a
+list sits next to the row that adds to one; a held press swallows the click that follows it, so
+holding a list never also opens it.
+
+That pill carries a word, a border and the list's own colour because a bare grey **⋯** did not
+survive contact with a thumb: it sat 8px from the app's gear in the same corner, in the same grey, at
+the same weight, and the gear kept winning. Position was the only thing separating two controls that
+do entirely different things, and position is exactly what a thumb approximates.
 
 ## Storage
 
@@ -308,7 +325,7 @@ One `localStorage` key, `unstuck.v1`:
 ```jsonc
 {
   "schema": 3,
-  "settings": { "textScale", "contrast", "motion", "speak" },
+  "settings": { "textScale", "contrast", "motion", "speak", "accent" },
   "timer": { "duration", "endsAt", "label", "pausedAt" } | null,
   "lists": [{ "id", "name", "kind", "color", "keepDone", "showProgress", "timerMinutes", "items": [
     { "id", "text", "done", "doneAt", "count", "lastDone", "subs": [

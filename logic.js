@@ -37,7 +37,10 @@ var UnstuckLogic = (() => {
   const MAX_TIMER_MINUTES = 24 * 60;
 
   const TEXT_SCALES = { normal: 1, large: 1.15, larger: 1.3 };
-  const DEFAULT_SETTINGS = { textScale: 'normal', contrast: 'auto', motion: 'auto', speak: false };
+  const DEFAULT_ACCENT = 'amber';
+  const DEFAULT_SETTINGS = {
+    textScale: 'normal', contrast: 'auto', motion: 'auto', speak: false, accent: DEFAULT_ACCENT,
+  };
 
   function normalizeSettings(raw) {
     const s = raw && typeof raw === 'object' ? raw : {};
@@ -46,6 +49,8 @@ var UnstuckLogic = (() => {
       contrast: s.contrast === 'high' || s.contrast === 'normal' ? s.contrast : 'auto',
       motion: s.motion === 'reduced' || s.motion === 'full' ? s.motion : 'auto',
       speak: Boolean(s.speak),
+      // The app's own colour, held exactly like a list's: a palette name or a hex.
+      accent: normalizeColor(s.accent) || DEFAULT_ACCENT,
     };
   }
 
@@ -198,6 +203,27 @@ var UnstuckLogic = (() => {
     // White is the most legible thing there is; if that misses, the background is
     // the problem, and returning it unchanged would be a silent failure.
     return '#ffffff';
+  }
+
+  /** The same hue at a different strength — the ends of the pick button's gradient. */
+  function shade(value, satFactor, valFactor) {
+    const hsv = hexToHsv(value);
+    if (!hsv) return null;
+    const clamp = (n) => Math.min(1, Math.max(0, n));
+    return hsvToHex(hsv.h, clamp(hsv.s * satFactor), clamp(hsv.v * valFactor));
+  }
+
+  /**
+   * Text to sit on top of `value`: a near-black or near-white of the same hue,
+   * whichever reads better. Staying in the hue family is why the amber accent's
+   * ink is a warm brown rather than a flat black.
+   */
+  function inkOn(value) {
+    const hsv = hexToHsv(value);
+    if (!hsv) return null;
+    const dark = hsvToHex(hsv.h, Math.min(1, hsv.s + 0.1), 0.14);
+    const light = hsvToHex(hsv.h, 0.12, 1);
+    return contrastRatio(value, dark) >= contrastRatio(value, light) ? dark : light;
   }
 
   /**
@@ -665,7 +691,7 @@ var UnstuckLogic = (() => {
     SCHEMA, STORE_KEY, COLORS, KIND_LABEL, HISTORY_LIMIT, STARTER_LISTS,
     uid, emptyState, newItem, newSub, newList, listFromStarter, migrate, resolveKind,
     normalizeHex, normalizeColor, isCustomColor, hsvToHex, hexToHsv,
-    luminance, contrastRatio, readableOn,
+    luminance, contrastRatio, readableOn, shade, inkOn, DEFAULT_ACCENT,
     TIMER_PRESETS, TEXT_SCALES, DEFAULT_SETTINGS, normalizeSettings, normalizeTimerMinutes,
     startTimer, timerRemaining, timerFinished, pauseTimer, resumeTimer, extendTimer,
     normalizeTimer, formatClock, formatMinutes, formatMinutesShort,

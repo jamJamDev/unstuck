@@ -330,14 +330,18 @@ test('a list carries its own standing timer length, validated', () => {
 test('settings fall back to safe defaults rather than trusting the file', () => {
   assert.deepEqual(L.normalizeSettings(), L.DEFAULT_SETTINGS);
   assert.deepEqual(L.normalizeSettings('nonsense'), L.DEFAULT_SETTINGS);
-  assert.deepEqual(L.normalizeSettings({ textScale: 'huge', contrast: 'weird', motion: 'spin', speak: 'yes' }), {
-    textScale: 'normal', contrast: 'auto', motion: 'auto', speak: true,
-  });
+  assert.deepEqual(L.normalizeSettings({
+    textScale: 'huge', contrast: 'weird', motion: 'spin', speak: 'yes', accent: 'chartreuse',
+  }), { textScale: 'normal', contrast: 'auto', motion: 'auto', speak: true, accent: 'amber' });
 });
 
 test('settings that are valid are kept as they are', () => {
-  const wanted = { textScale: 'larger', contrast: 'high', motion: 'reduced', speak: true };
+  const wanted = {
+    textScale: 'larger', contrast: 'high', motion: 'reduced', speak: true, accent: 'teal',
+  };
   assert.deepEqual(L.normalizeSettings(wanted), wanted);
+  assert.equal(L.normalizeSettings({ accent: '#00FF88' }).accent, '#00ff88', 'a custom accent too');
+  assert.equal(L.normalizeSettings({ accent: 'rgb(0,255,136)' }).accent, 'amber', 'only what the app stores');
   // Contrast follows the phone by default, and says so rather than guessing normal.
   assert.equal(L.normalizeSettings({ contrast: 'auto' }).contrast, 'auto');
   assert.equal(L.normalizeSettings({ contrast: 'normal' }).contrast, 'normal');
@@ -367,6 +371,24 @@ test('a list colour too dark to read is lifted, keeping its hue', () => {
   assert.equal(L.readableOn('nope', surface, 4.5), null, 'refused, not guessed');
 });
 
+test('an accent carries its own gradient ends and its own ink', () => {
+  const amber = '#f4a13c';
+  const lit = L.shade(amber, 0.72, 1.06);
+  const deep = L.shade(amber, 1.08, 0.82);
+  assert.ok(L.luminance(lit) > L.luminance(amber), 'the top of the gradient is the lighter end');
+  assert.ok(L.luminance(deep) < L.luminance(amber), 'and the bottom is the darker one');
+  assert.equal(Math.round(L.hexToHsv(lit).h), Math.round(L.hexToHsv(amber).h), 'same hue throughout');
+  assert.equal(L.shade('not a colour', 1, 1), null, 'refused, not guessed');
+
+  // Ink has to be readable on whatever the accent turns out to be, either end.
+  for (const accent of [amber, '#0d0d10', '#ffffff', '#4dd0c4', '#3a0d0d']) {
+    const ink = L.inkOn(accent);
+    assert.ok(L.contrastRatio(ink, accent) >= 4.5,
+      accent + ' would carry text at ' + L.contrastRatio(ink, accent).toFixed(2) + ':1');
+  }
+  assert.equal(L.inkOn('nope'), null);
+});
+
 test('every palette colour is already legible on a card', () => {
   // The palette lives in the stylesheet, so this reads it there: a new swatch too
   // dark to read as text would otherwise only show up on someone's phone.
@@ -388,7 +410,7 @@ test('every text scale is a real multiplier', () => {
 
 test('a state with settings and a running timer round-trips through migrate', () => {
   const s = L.emptyState();
-  s.settings = { textScale: 'large', contrast: 'high', motion: 'full', speak: true };
+  s.settings = { textScale: 'large', contrast: 'high', motion: 'full', speak: true, accent: '#4dd0c4' };
   s.timer = { duration: 60000, endsAt: 123456, label: 'Reading', pausedAt: 0 };
   assert.deepEqual(L.migrate(JSON.parse(JSON.stringify(s))), s);
 });

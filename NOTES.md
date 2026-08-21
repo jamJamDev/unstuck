@@ -6,13 +6,24 @@ this is state and direction only.
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-114 unit checks (`./test.sh`) and 85 browser checks (`./test.sh --browser`) passing.
+115 unit checks (`./test.sh`) and 88 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
 switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
 settings.
 
-**Uncommitted:** an accessibility round — a legibility floor for custom list colours, 24px-minimum
+**Uncommitted:** the app's own colour is now a setting — the same eight swatches and the same wheel a
+list gets. The wheel moved into its own dialog with two owners rather than being duplicated, and the
+hex box now takes `rgb()` as well. One accent is stored; the gradient ends and the ink on top are
+derived, so nothing can drift out of step with it.
+
+Also uncommitted: the list's **⋯ Options** control became a labelled pill in the list's colour. It was
+a bare grey glyph 8px from the app's gear, in the same corner and the same grey, and the gear kept
+catching the thumb aimed at it. Colour alone would have fixed one of the four things that made them
+look alike; the pill differs in shape, size, colour and content. The sheet's first row now reads
+"Edit list details" rather than "Edit name, kind and colour".
+
+Also uncommitted, an accessibility round — a legibility floor for custom list colours, 24px-minimum
 touch targets in list rows, "Match phone" for contrast, and the dead CSS from the old kind picker
 removed.
 
@@ -77,9 +88,11 @@ plan. Only the code is public; lists live in each device's storage and never lea
 - **Subtasks are parts, not things.** Only their parent is ever picked. Putting steps in the pool
   would hand you a six-step job six times as often as *wash up* — the odds distortion is the whole
   reason, and it is not fixable by weighting without reintroducing knobs.
-- **Whole-list actions live in one sheet**, reached by holding a list or by the ⋯ beside its title.
-  Nothing that edits a list goes near the row that adds to one: "Edit list" sat above the add row
-  and got pressed by a thumb reaching to add an item.
+- **Whole-list actions live in one sheet**, reached by holding a list or by the ⋯ Options pill beside
+  its title. Nothing that edits a list goes near the row that adds to one: "Edit list" sat above the
+  add row and got pressed by a thumb reaching to add an item. The pill is labelled and tinted because
+  the bare glyph then lost to the app's gear, 8px away in the same corner — twice now, a control on
+  this screen has been mistaken for its neighbour, so proximity is the thing to design against here.
 - **Nesting is one level.** Steps of a moved thing arrive beside it, never underneath. A second
   level is not a data problem, it is a card problem — the picked card has room for one checklist.
 - **One drag does both nesting and reordering**, split by where on the target row the finger lets

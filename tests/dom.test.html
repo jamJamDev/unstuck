@@ -998,8 +998,9 @@
     openEditDialog(app);
     await waitFor(() => app.$('listDialog').open, 'the edit dialog');
 
-    equal(shown(app.win, app.$('customColor')), false, 'the picker starts closed');
+    equal(app.$('colorDialog').open, false, 'the picker starts closed');
     app.$('addColorBtn').click();
+    equal(app.$('colorDialog').open, true, 'the + swatch opens the wheel');
     equal(shown(app.win, app.$('customColor')), true);
     assert(/^#[0-9a-f]{6}$/.test(app.$('colorHex').value), 'seeded from the current colour, got ' + app.$('colorHex').value);
 
@@ -1009,6 +1010,8 @@
     equal(app.doc.querySelectorAll('#swatches .swatch:not(.add)').length, 9, 'the custom colour becomes a swatch');
     equal(app.doc.querySelector('#swatches [aria-pressed="true"]').dataset.color, '#00ff88');
 
+    app.$('colorDone').click();
+    await waitFor(() => !app.$('colorDialog').open, 'the picker to close');
     app.$('listForm').dispatchEvent(new app.win.Event('submit', { cancelable: true }));
     await waitFor(() => stored().lists[0].color === '#00ff88', 'the custom colour to save');
 
@@ -1354,6 +1357,78 @@
       if (w < 24 || h < 24) small.push(el.className + ' ' + Math.round(w) + 'x' + Math.round(h));
     }
     equal(small.join(', '), '', 'these are below the WCAG 2.2 target floor');
+  });
+
+  test('the app colour is chosen in Settings and reaches what the app draws', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('dataBtn').click();
+    const swatches = [...app.doc.querySelectorAll('#accentSwatches .swatch:not(.add)')];
+    equal(swatches.length, 8, 'the palette, same as a list gets');
+
+    const teal = swatches.find((s) => s.dataset.color === 'teal');
+    teal.click();
+    await waitFor(() => stored().settings.accent === 'teal', 'the choice to save');
+    const root = app.doc.documentElement;
+    const accent = root.style.getPropertyValue('--accent').trim();
+    equal(accent, '#4dd0c4', 'the palette hex, read back out of the stylesheet');
+    // Everything derived from it has to move together, or a teal button keeps an
+    // amber highlight.
+    assert(root.style.getPropertyValue('--accent-lit').trim(), 'the gradient needs its light end');
+    assert(root.style.getPropertyValue('--accent-deep').trim(), 'and its deep one');
+    const ink = root.style.getPropertyValue('--accent-ink').trim();
+    assert(app.win.UnstuckLogic.contrastRatio(ink, accent) >= 4.5,
+      'text on the button reads at ' + app.win.UnstuckLogic.contrastRatio(ink, accent).toFixed(2) + ':1');
+
+    const again = await boot(stored());
+    equal(again.doc.documentElement.style.getPropertyValue('--accent').trim(), '#4dd0c4', 'kept across a reload');
+  });
+
+  test('the app colour takes a custom one from the same wheel a list uses', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('dataBtn').click();
+    app.$('addAccentBtn').click();
+    equal(app.$('colorDialog').open, true, 'one wheel, opened by whoever needs it');
+    // Regression: the marker is placed from the wheel's measured radius, and a
+    // dialog that has not opened yet measures zero, which parked it in the corner.
+    const wheelBox = app.$('colorWheel').getBoundingClientRect();
+    const marker = app.$('wheelMarker').getBoundingClientRect();
+    const fromCentre = Math.hypot(marker.left + marker.width / 2 - (wheelBox.left + wheelBox.width / 2),
+      marker.top + marker.height / 2 - (wheelBox.top + wheelBox.height / 2));
+    assert(fromCentre <= wheelBox.width / 2 + 2, 'the marker sits on the wheel, ' + Math.round(fromCentre) + 'px out');
+
+    // rgb() is what a colour usually gets copied as, so the box takes it.
+    app.$('colorHex').value = 'rgb(0, 255, 136)';
+    app.$('colorHex').dispatchEvent(new app.win.Event('blur', { bubbles: true }));
+    await waitFor(() => stored().settings.accent === '#00ff88', 'the typed colour to land');
+    equal(app.doc.documentElement.style.getPropertyValue('--accent').trim(), '#00ff88');
+    equal(shown(app.win, app.$('colorError')), false, 'rgb() is a colour, not an error');
+
+    app.$('colorDone').click();
+    await waitFor(() => !app.$('colorDialog').open, 'the picker to close');
+    equal(app.doc.querySelector('#accentSwatches [aria-pressed="true"]').dataset.color, '#00ff88',
+      'and joins the row so it can be reselected');
+    equal(stored().lists[0].color, 'sky', 'the list keeps its own colour');
+  });
+
+  test('the list options button cannot be mistaken for the app gear', async () => {
+    // Regression: both were bare grey glyphs 8px apart in the same corner, and the
+    // gear kept winning the thumb that was reaching for list options.
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    openTheList(app, 0);
+    const opts = app.$('listOptionsBtn');
+    const gear = app.$('dataBtn');
+
+    assert(/options/i.test(opts.textContent), 'it has to say what it is, not just draw a glyph');
+    const optsStyle = app.win.getComputedStyle(opts);
+    const gearStyle = app.win.getComputedStyle(gear);
+    assert(optsStyle.color !== gearStyle.color, 'both were ' + gearStyle.color);
+    assert(parseFloat(optsStyle.borderTopWidth) > 0, 'the gear has no border; this one does');
+    assert(opts.getBoundingClientRect().width > gear.getBoundingClientRect().width + 20,
+      'a different silhouette, not just a different colour');
+    equal(opts.getAttribute('aria-label'), 'Options for this list', 'the glyph must not reach a reader');
+
+    opts.click();
+    await waitFor(() => app.$('actionsDialog').open, 'the options sheet');
   });
 
   test('the tip jar leaves the app safely, and stays at the bottom of Settings', async () => {

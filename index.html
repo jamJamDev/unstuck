@@ -237,13 +237,16 @@ main {
   max-height: 46vh;
   border: 0;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 35%, #ffc06a, var(--accent) 62%, #d9791f);
+  /* Both ends are derived from the accent, so changing it cannot leave an amber
+     highlight on a teal button. */
+  background: radial-gradient(circle at 50% 35%, var(--accent-lit, #ffc06a), var(--accent) 62%, var(--accent-deep, #d9791f));
   color: var(--accent-ink);
   font-size: 1.5rem;
   font-weight: 750;
   letter-spacing: 0.2px;
   line-height: 1.25;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset, 0 18px 50px -18px rgba(244,161,60,0.65);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset,
+              0 18px 50px -18px color-mix(in srgb, var(--accent) 65%, transparent);
   transition: transform 140ms ease, box-shadow 140ms ease;
 }
 .pick-btn span { display: block; font-size: 0.9375rem; font-weight: 600; opacity: 0.72; }
@@ -516,20 +519,31 @@ main {
 .detail-title-row .title { flex: 1; min-width: 0; }
 
 /* Everything that is not "add another thing" lives behind this, well away from
-   the add row — reaching for one and hitting the other is the whole reason. */
+   the add row — reaching for one and hitting the other is the whole reason.
+   It also has to not be the app's gear, which sits a thumb's width above it in
+   the same corner: a bare grey glyph there was reached for by mistake, so this
+   one carries a word, a border and the list's own colour. */
 .options-btn {
   flex: none;
-  min-width: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: var(--tap);
-  margin: -6px -8px 0 0;
-  background: none;
-  border: 0;
-  border-radius: 12px;
-  color: var(--muted);
-  font-size: 1.5rem;
+  margin-top: -4px;
+  padding: 0 13px;
+  background: color-mix(in srgb, var(--list-color, var(--accent)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--list-color, var(--accent)) 45%, transparent);
+  border-radius: 999px;
+  color: var(--list-ink, var(--list-color, var(--accent)));
+  font-size: 0.875rem;
+  font-weight: 600;
   line-height: 1;
 }
-.options-btn:hover { color: var(--text); background: var(--surface-2); }
+.options-btn .dots { font-size: 1.25rem; line-height: 0.6; }
+.options-btn:hover {
+  background: color-mix(in srgb, var(--list-color, var(--accent)) 24%, transparent);
+  border-color: var(--list-color, var(--accent));
+}
 
 .detail-head .title {
   display: flex;
@@ -1418,7 +1432,8 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       <div class="detail-head">
         <div class="detail-title-row">
           <div id="detailTitle" class="title"><span class="dot"></span><span></span></div>
-          <button id="listOptionsBtn" class="options-btn" aria-label="Options for this list" title="List options">&#8943;</button>
+          <button id="listOptionsBtn" class="options-btn" aria-label="Options for this list" title="List options"><span
+            class="dots" aria-hidden="true">&#8943;</span>Options</button>
         </div>
         <div id="detailKind" class="kind"></div>
         <div id="detailProgress" hidden>
@@ -1480,7 +1495,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     <h2 id="actionsTitle">List options</h2>
     <p class="dlg-sub" id="actionsSub"></p>
     <div class="sheet">
-      <button type="button" class="btn" id="actionsEdit">Edit name, kind and colour</button>
+      <button type="button" class="btn" id="actionsEdit">Edit list details</button>
       <button type="button" class="btn danger" id="actionsDelete">Delete this list</button>
     </div>
     <div class="dlg-actions">
@@ -1547,23 +1562,6 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     <div class="field">
       <span>Colour</span>
       <div class="swatches" id="swatches" role="group" aria-label="List colour"></div>
-      <div class="custom-color" id="customColor" hidden>
-        <div class="wheel" id="colorWheel" role="application" tabindex="0"
-             aria-label="Colour wheel. Drag to choose, or use the arrow keys: left and right change the hue, up and down the strength.">
-          <div class="wheel-shade" id="wheelShade" aria-hidden="true"></div>
-          <div class="wheel-marker" id="wheelMarker" aria-hidden="true"></div>
-        </div>
-        <label class="wheel-row">
-          <span>Brightness</span>
-          <input type="range" id="colorValue" min="4" max="100" value="100">
-        </label>
-        <div class="wheel-row">
-          <span class="wheel-preview" id="colorPreview" aria-hidden="true"></span>
-          <input type="text" id="colorHex" maxlength="7" placeholder="#4dd0c4" autocomplete="off"
-                 spellcheck="false" aria-label="Hex colour code" aria-describedby="colorError">
-        </div>
-      </div>
-      <p class="seg-note" id="colorError" role="alert" hidden></p>
     </div>
 
     <div class="dlg-actions">
@@ -1571,6 +1569,35 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       <button type="submit" class="btn primary" id="listSave">Create list</button>
     </div>
   </form>
+</dialog>
+
+<!-- One wheel, two owners: a list's colour and the app's own. -->
+<dialog id="colorDialog" aria-labelledby="colorDialogTitle">
+  <div class="dlg-body">
+    <h2 id="colorDialogTitle">Custom colour</h2>
+    <p class="dlg-sub" id="colorDialogSub"></p>
+    <div class="custom-color" id="customColor">
+      <div class="wheel" id="colorWheel" role="application" tabindex="0"
+           aria-label="Colour wheel. Drag to choose, or use the arrow keys: left and right change the hue, up and down the strength.">
+        <div class="wheel-shade" id="wheelShade" aria-hidden="true"></div>
+        <div class="wheel-marker" id="wheelMarker" aria-hidden="true"></div>
+      </div>
+      <label class="wheel-row">
+        <span>Brightness</span>
+        <input type="range" id="colorValue" min="4" max="100" value="100">
+      </label>
+      <div class="wheel-row">
+        <span class="wheel-preview" id="colorPreview" aria-hidden="true"></span>
+        <input type="text" id="colorHex" maxlength="25" placeholder="#4dd0c4 or rgb(77, 208, 196)"
+               autocomplete="off" spellcheck="false" aria-label="Colour code"
+               aria-describedby="colorError">
+      </div>
+    </div>
+    <p class="seg-note" id="colorError" role="alert" hidden></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn primary" id="colorDone">Done</button>
+    </div>
+  </div>
 </dialog>
 
 <dialog id="starterDialog" aria-labelledby="starterDialogTitle">
@@ -1607,6 +1634,13 @@ dialog select:focus { border-color: var(--accent); outline: none; }
         <label><input type="radio" name="motion" value="reduced"><span>Off</span></label>
       </div>
       <p class="seg-note">"Match phone" follows your device's reduce-motion setting.</p>
+    </div>
+
+    <div class="field">
+      <span>App colour</span>
+      <div class="swatches" id="accentSwatches" role="group" aria-label="App colour"></div>
+      <p class="seg-note">Colours the buttons, the timer and everything the app draws in its own
+        colour. A list keeps its own.</p>
     </div>
 
     <div class="field">
@@ -1682,6 +1716,9 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   // colour that clears the floor against it clears it against the darker one too.
   const SURFACE_HEX = '#1d222b';
   const TEXT_CONTRAST = 4.5;
+  // The amber the stylesheet ships with, for the one case where a palette colour
+  // cannot be read back out of it.
+  const ACCENT_FALLBACK = '#f4a13c';
 
   const swipeHintText = () => coarsePointer.matches
     ? 'Swipe left to skip, right to accept'
@@ -1728,10 +1765,30 @@ dialog select:focus { border-color: var(--accent); outline: none; }
 
   // ------------------------------------------------------------- settings
 
+  /** The palette hexes live in the stylesheet; this reads one back rather than copying it. */
+  function accentHex(accent) {
+    if (L.isCustomColor(accent)) return accent;
+    const probe = document.createElement('span');
+    probe.className = 'c-' + accent;
+    probe.style.display = 'none';
+    document.body.appendChild(probe);
+    const hex = L.normalizeHex(getComputedStyle(probe).getPropertyValue('--list-color').trim())
+      || rgbToHex(getComputedStyle(probe).getPropertyValue('--list-color').trim());
+    probe.remove();
+    return hex || ACCENT_FALLBACK;
+  }
+
   /** Pushes the accessibility settings onto the document root, where CSS reads them. */
   function applySettings() {
     const s = state.settings;
     const root = document.documentElement;
+    // The app's colour is one choice; everything drawn from it — the gradient's two
+    // ends and the text that sits on it — is derived so they can never drift apart.
+    const accent = accentHex(s.accent);
+    root.style.setProperty('--accent', accent);
+    root.style.setProperty('--accent-lit', L.shade(accent, 0.72, 1.06) || accent);
+    root.style.setProperty('--accent-deep', L.shade(accent, 1.08, 0.82) || accent);
+    root.style.setProperty('--accent-ink', L.inkOn(accent) || '#000000');
     root.style.setProperty('--text-scale', String(L.TEXT_SCALES[s.textScale] || 1));
     // The stylesheet only knows high or not; "match phone" is resolved here so the
     // phone's own accessibility setting is honoured without a second CSS path.
@@ -1938,7 +1995,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     } else {
       const listCount = activeLists().length;
       const scope = state.selection.length ? plural(listCount, 'list', 'lists') : 'all your lists';
-      $('poolNote').textContent = plural(p.length, 'thing', 'things') + ' in the hat, across ' + scope + '.';
+      $('poolNote').textContent = plural(p.length, 'thing', 'things') + ' to pick from, across ' + scope + '.';
     }
   }
 
@@ -2992,8 +3049,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     add.className = 'swatch add';
     add.textContent = '+';
     add.setAttribute('aria-label', 'Choose a custom colour');
-    add.setAttribute('aria-expanded', String(!$('customColor').hidden));
-    add.addEventListener('click', toggleCustomColor);
+    add.addEventListener('click', openListColorPicker);
     box.appendChild(add);
   }
 
@@ -3004,28 +3060,44 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     }
   }
 
-  function toggleCustomColor() {
-    const row = $('customColor');
-    const opening = row.hidden;
-    row.hidden = !opening;
-    $('addColorBtn').setAttribute('aria-expanded', String(opening));
-    if (!opening) {
-      showColorError('');
-      return;
-    }
+  /**
+   * The wheel serves a list's colour and the app's own, so what it feeds is
+   * passed in rather than wired to one of them.
+   */
+  const picker = { onPick: null };
+
+  function openColorPicker(startHex, subtitle, onPick) {
+    picker.onPick = onPick;
+    $('colorDialogSub').textContent = subtitle;
+    // Opened before the wheel is seeded: the marker is placed from the wheel's
+    // measured radius, and a closed dialog measures zero.
+    $('colorDialog').showModal();
+    setWheelFromHex(startHex, true, false);
+    $('colorWheel').focus({ preventScroll: true });
+  }
+
+  $('colorDialog').addEventListener('close', () => {
+    picker.onPick = null;
+    showColorError('');
+  });
+  $('colorDone').addEventListener('click', () => $('colorDialog').close());
+
+  function openListColorPicker() {
     // Seed from whatever is selected, resolving a palette name to its rendered
     // hex rather than duplicating the palette in script.
-    setWheelFromHex(L.isCustomColor(ui.draftColor) ? ui.draftColor : currentSwatchHex(), true, false);
-    row.scrollIntoView({ block: 'nearest' });
-    $('colorWheel').focus({ preventScroll: true });
+    const start = L.isCustomColor(ui.draftColor) ? ui.draftColor : currentSwatchHex();
+    openColorPicker(start, 'For this list', (hex) => {
+      ui.draftColor = hex;
+      syncCustomSwatch();
+    });
   }
 
   /** Reads the selected palette swatch's rendered colour, in #rrggbb form. */
   function currentSwatchHex() {
     const selected = $('swatches').querySelector('[aria-pressed="true"]');
-    if (!selected) return '#f4a13c';
+    if (!selected) return ACCENT_FALLBACK;
     const value = getComputedStyle(selected).getPropertyValue('--list-color').trim();
-    return L.normalizeHex(value) || rgbToHex(value) || '#f4a13c';
+    return L.normalizeHex(value) || rgbToHex(value) || ACCENT_FALLBACK;
   }
 
   function rgbToHex(value) {
@@ -3075,9 +3147,10 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     el.setAttribute('aria-valuetext', hex);
     if (syncHexBox) $('colorHex').value = hex;
     showColorError('');
-    if (adopt === false) return;
-    ui.draftColor = hex;
-    syncCustomSwatch();
+    // Seeding the wheel from a colour must not count as choosing one: opening the
+    // picker on a palette list would otherwise silently turn it custom.
+    if (adopt === false || !picker.onPick) return;
+    picker.onPick(hex);
   }
 
   /**
@@ -3157,10 +3230,13 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   });
 
   function applyTypedHex(raw, syncHexBox) {
-    const hex = L.normalizeHex(raw);
+    // rgb() and rgba() are what a colour usually gets copied as, so they are read
+    // too. Alpha is dropped: a translucent accent would take whatever sits behind
+    // it, and the contrast floors could not hold.
+    const hex = L.normalizeHex(raw) || rgbToHex(raw);
     if (!hex) {
       // Say so rather than quietly keeping the old colour.
-      showColorError('That is not a colour code. Try something like #4dd0c4.');
+      showColorError('That is not a colour code. Try #4dd0c4 or rgb(77, 208, 196).');
       return;
     }
     setWheelFromHex(hex, syncHexBox);
@@ -3210,8 +3286,6 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     $('listTimer').value = String(list ? list.timerMinutes : 0);
     syncListTimerNote();
     syncKeepField();
-    // The picker starts closed each time; a custom colour is already in the row.
-    $('customColor').hidden = true;
     showColorError('');
     buildSwatches();
     $('listDialog').showModal();
@@ -3228,7 +3302,7 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     // The segmented buttons are short by design, so spell out what each means.
     // This one describes both kinds, so it is set before the early return below.
     $('kindDesc').textContent = checks
-      ? 'Finishing something takes it out of the hat. Chores, books, errands.'
+      ? 'Finishing something stops it being picked. Chores, books, errands.'
       : 'Never finished, just done again — each pick logs a session.';
 
     // The reassurance about switching only earns its space while switching.
@@ -3980,6 +4054,45 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     const contrast = document.querySelector('input[name="contrast"][value="' + s.contrast + '"]');
     if (contrast) contrast.checked = true;
     $('speakToggle').checked = s.speak;
+    buildAccentSwatches();
+  }
+
+  /** The same swatch row a list gets, pointed at the app's own colour. */
+  function buildAccentSwatches() {
+    const box = $('accentSwatches');
+    const chosen = state.settings.accent;
+    box.textContent = '';
+
+    const swatches = COLORS.slice();
+    if (L.isCustomColor(chosen)) swatches.push(chosen);
+
+    for (const color of swatches) {
+      const sw = document.createElement('button');
+      sw.type = 'button';
+      paintColor(sw, 'swatch', color);
+      sw.dataset.color = color;
+      if (L.isCustomColor(color)) sw.dataset.custom = 'true';
+      sw.setAttribute('aria-label', L.isCustomColor(color) ? 'Custom colour ' + color : color);
+      sw.setAttribute('aria-pressed', String(color === chosen));
+      sw.addEventListener('click', () => setAccent(color));
+      box.appendChild(sw);
+    }
+
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.id = 'addAccentBtn';
+    add.className = 'swatch add';
+    add.textContent = '+';
+    add.setAttribute('aria-label', 'Choose a custom app colour');
+    add.addEventListener('click', () => {
+      openColorPicker(accentHex(state.settings.accent), 'For the whole app', setAccent);
+    });
+    box.appendChild(add);
+  }
+
+  function setAccent(color) {
+    changeSetting({ accent: color });
+    buildAccentSwatches();
   }
 
   function changeSetting(patch) {
