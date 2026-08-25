@@ -62,12 +62,12 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (115 checks, `node --test`, zero dependencies) — validation and coercion
+- **`tests/logic.test.js`** (123 checks, `node --test`, zero dependencies) — validation and coercion
   in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
   selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
   directions, every nest / move / promote / reorder, and the pick algorithm with an injected RNG so
   every branch is deterministic.
-- **`tests/dom.test.html`** (88 checks) — loads the real app in an iframe with real CSS and real
+- **`tests/dom.test.html`** (90 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was checked, that a kind change keeps every item, that the two display switches are
@@ -135,6 +135,12 @@ Hue and saturation are held as wheel state rather than re-derived from the hex, 
 grey does not lose the angle. Seeding the wheel from the current colour deliberately does *not*
 adopt it — opening the picker and closing it must leave a palette list on its palette colour.
 Arrow keys drive the wheel too, since a wheel is otherwise pointer-only.
+
+**Sorting the grid.** Once there are two lists, a **Sort** control sits above them: as added, by name
+either way, or by how many things are left to pick — most first or fewest first. It is a view, not a
+reorder: `sortLists` returns a sorted copy and the stored order is never rewritten, so "As added"
+always comes back. Lists of equal size fall back to their names, so the grid cannot shuffle between
+renders. The choice is a setting, so it survives a reload.
 
 **Starter lists** (offered on a first run, and any time from the Lists screen) are themed, with the
 kind that suits them already set: Around the house, Productive, Creative, Get outside, Rest, Learn
@@ -325,7 +331,7 @@ One `localStorage` key, `unstuck.v1`:
 ```jsonc
 {
   "schema": 3,
-  "settings": { "textScale", "contrast", "motion", "speak", "accent" },
+  "settings": { "textScale", "contrast", "motion", "speak", "accent", "listSort" },
   "timer": { "duration", "endsAt", "label", "pausedAt" } | null,
   "lists": [{ "id", "name", "kind", "color", "keepDone", "showProgress", "timerMinutes", "items": [
     { "id", "text", "done", "doneAt", "count", "lastDone", "subs": [

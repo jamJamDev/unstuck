@@ -39,7 +39,8 @@ var UnstuckLogic = (() => {
   const TEXT_SCALES = { normal: 1, large: 1.15, larger: 1.3 };
   const DEFAULT_ACCENT = 'amber';
   const DEFAULT_SETTINGS = {
-    textScale: 'normal', contrast: 'auto', motion: 'auto', speak: false, accent: DEFAULT_ACCENT,
+    textScale: 'normal', contrast: 'auto', motion: 'auto', speak: false,
+    accent: DEFAULT_ACCENT, listSort: 'added',
   };
 
   function normalizeSettings(raw) {
@@ -51,6 +52,7 @@ var UnstuckLogic = (() => {
       speak: Boolean(s.speak),
       // The app's own colour, held exactly like a list's: a palette name or a hex.
       accent: normalizeColor(s.accent) || DEFAULT_ACCENT,
+      listSort: Object.prototype.hasOwnProperty.call(LIST_SORTS, s.listSort) ? s.listSort : 'added',
     };
   }
 
@@ -589,6 +591,36 @@ var UnstuckLogic = (() => {
     return list.items.filter((it) => isPickable(list, it)).length;
   }
 
+  /**
+   * How the lists screen is ordered. "As added" is the default and is not a sort
+   * at all — it is the order they were made in, which is the only one the user
+   * controls directly.
+   */
+  const LIST_SORTS = {
+    added: 'As added',
+    az: 'Name A to Z',
+    za: 'Name Z to A',
+    most: 'Most left first',
+    fewest: 'Fewest left first',
+  };
+
+  /**
+   * A sorted copy — the stored order is what "as added" means, so it is never
+   * rewritten. Ties fall back to the name so the grid cannot shuffle between
+   * renders when two lists have the same number left.
+   */
+  function sortLists(lists, mode) {
+    const rows = lists.slice();
+    if (!Object.prototype.hasOwnProperty.call(LIST_SORTS, mode) || mode === 'added') return rows;
+    const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+    if (mode === 'az') return rows.sort(byName);
+    if (mode === 'za') return rows.sort((a, b) => byName(b, a));
+    const left = new Map(rows.map((l) => [l, pickableCount(l)]));
+    const size = (a, b) => left.get(b) - left.get(a);
+    return rows.sort(mode === 'most' ? (a, b) => size(a, b) || byName(a, b)
+      : (a, b) => size(b, a) || byName(a, b));
+  }
+
   /** No selection means every list is in play. */
   function activeLists(state) {
     if (!state.selection.length) return state.lists;
@@ -697,7 +729,7 @@ var UnstuckLogic = (() => {
     normalizeTimer, formatClock, formatMinutes, formatMinutesShort,
     setDone, logSession, subsDone, allSubsDone, setSubsDone, setDoneWithSubs, syncFromSubs,
     subFromItem, nestItem, moveSub, promoteSub, moveItemBeside, moveSubBeside,
-    listById, isPickable, pickableCount, activeLists, pool,
+    listById, isPickable, pickableCount, activeLists, pool, LIST_SORTS, sortLists,
     recentDepth, chooseFrom, pushHistory,
     plural, relativeDay, listSummary, cardMeta,
   };

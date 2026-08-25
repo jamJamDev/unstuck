@@ -332,12 +332,12 @@ test('settings fall back to safe defaults rather than trusting the file', () => 
   assert.deepEqual(L.normalizeSettings('nonsense'), L.DEFAULT_SETTINGS);
   assert.deepEqual(L.normalizeSettings({
     textScale: 'huge', contrast: 'weird', motion: 'spin', speak: 'yes', accent: 'chartreuse',
-  }), { textScale: 'normal', contrast: 'auto', motion: 'auto', speak: true, accent: 'amber' });
+  }), { textScale: 'normal', contrast: 'auto', motion: 'auto', speak: true, accent: 'amber', listSort: 'added' });
 });
 
 test('settings that are valid are kept as they are', () => {
   const wanted = {
-    textScale: 'larger', contrast: 'high', motion: 'reduced', speak: true, accent: 'teal',
+    textScale: 'larger', contrast: 'high', motion: 'reduced', speak: true, accent: 'teal', listSort: 'az',
   };
   assert.deepEqual(L.normalizeSettings(wanted), wanted);
   assert.equal(L.normalizeSettings({ accent: '#00FF88' }).accent, '#00ff88', 'a custom accent too');
@@ -410,7 +410,9 @@ test('every text scale is a real multiplier', () => {
 
 test('a state with settings and a running timer round-trips through migrate', () => {
   const s = L.emptyState();
-  s.settings = { textScale: 'large', contrast: 'high', motion: 'full', speak: true, accent: '#4dd0c4' };
+  s.settings = {
+    textScale: 'large', contrast: 'high', motion: 'full', speak: true, accent: '#4dd0c4', listSort: 'fewest',
+  };
   s.timer = { duration: 60000, endsAt: 123456, label: 'Reading', pausedAt: 0 };
   assert.deepEqual(L.migrate(JSON.parse(JSON.stringify(s))), s);
 });
@@ -456,6 +458,71 @@ test('a selection scopes the pool to the chosen lists only', () => {
 test('pool entries carry the list they came from', () => {
   const s = stateWith([list('Books', 'once', ['Piranesi'])]);
   assert.equal(L.pool(s)[0].list.name, 'Books');
+});
+
+// -------------------------------------------------------------- list sort
+
+/** Named for what each sort should do to them: three sizes, three names. */
+const sortFixtures = () => [
+  list('Chores', 'once', ['a', 'b', 'c']),
+  list('apples', 'once', ['a']),
+  list('Books', 'once', ['a', 'b']),
+];
+
+const names = (rows) => rows.map((l) => l.name);
+
+test('sorting by name ignores case and reverses cleanly', () => {
+  assert.deepEqual(names(L.sortLists(sortFixtures(), 'az')), ['apples', 'Books', 'Chores']);
+  assert.deepEqual(names(L.sortLists(sortFixtures(), 'za')), ['Chores', 'Books', 'apples']);
+});
+
+test('sorting by size counts what is left to pick, both ways round', () => {
+  assert.deepEqual(names(L.sortLists(sortFixtures(), 'most')), ['Chores', 'Books', 'apples']);
+  assert.deepEqual(names(L.sortLists(sortFixtures(), 'fewest')), ['apples', 'Books', 'Chores']);
+});
+
+test('a size sort counts the pool, not the items', () => {
+  // Two things each, but one is checked off — so this list is the smaller one.
+  // Named so that counting items instead would tie, and the name tie-break would
+  // then put them the other way round.
+  const done = list('Almost done', 'once', [item('x'), item('y', { done: true })]);
+  const open = list('Busy', 'once', ['x', 'y']);
+  assert.deepEqual(names(L.sortLists([done, open], 'most')), ['Busy', 'Almost done']);
+});
+
+test('lists of equal size fall back to their names, so the grid cannot shuffle', () => {
+  const rows = [list('Zebra', 'once', ['a']), list('Ant', 'once', ['a'])];
+  assert.deepEqual(names(L.sortLists(rows, 'most')), ['Ant', 'Zebra']);
+  assert.deepEqual(names(L.sortLists(rows, 'fewest')), ['Ant', 'Zebra']);
+});
+
+test('an ongoing list counts every item, however many are flagged done', () => {
+  const endless = list('Ongoing', 'endless', [item('a', { done: true }), item('b', { done: true })]);
+  const once = list('Check off', 'once', ['a']);
+  assert.deepEqual(names(L.sortLists([once, endless], 'most')), ['Ongoing', 'Check off']);
+});
+
+test('"as added" and anything unrecognised leave the stored order alone', () => {
+  for (const mode of ['added', 'sideways', '', null, undefined]) {
+    assert.deepEqual(names(L.sortLists(sortFixtures(), mode)), ['Chores', 'apples', 'Books'],
+      'reordered under ' + JSON.stringify(mode));
+  }
+});
+
+test('sortLists returns a copy, so the stored order survives every sort', () => {
+  const rows = sortFixtures();
+  const sorted = L.sortLists(rows, 'az');
+  assert.notEqual(sorted, rows);
+  assert.deepEqual(names(rows), ['Chores', 'apples', 'Books']);
+  assert.deepEqual(names(L.sortLists([], 'az')), []);
+});
+
+test('every sort the settings accept is one the picker offers a name for', () => {
+  for (const mode of Object.keys(L.LIST_SORTS)) {
+    assert.equal(L.normalizeSettings({ listSort: mode }).listSort, mode);
+    assert.equal(typeof L.LIST_SORTS[mode], 'string');
+  }
+  assert.equal(L.normalizeSettings({ listSort: 'sideways' }).listSort, 'added');
 });
 
 test('listById returns null for an unknown id rather than undefined', () => {

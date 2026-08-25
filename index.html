@@ -437,6 +437,29 @@ main {
 .section-head h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; }
 .section-head .sub { color: var(--muted); font-size: 0.8125rem; }
 
+/* Ordering is a view of the lists, not a property of them, so it sits above the
+   grid it reorders rather than inside Settings with the app-wide choices. */
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.sort-row label { color: var(--muted); font-size: 0.8125rem; font-weight: 620; }
+.sort-row select {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+}
+.sort-row select:focus { border-color: var(--accent); outline: none; }
+
 .list-grid { display: flex; flex-direction: column; gap: 10px; }
 
 .list-card {
@@ -1419,6 +1442,16 @@ dialog select:focus { border-color: var(--accent); outline: none; }
         <h2 id="listsHeading">Your lists</h2>
         <span id="listsSub" class="sub"></span>
       </div>
+      <div class="sort-row" id="sortRow" hidden>
+        <label for="listSort">Sort</label>
+        <select id="listSort">
+          <option value="added">As added</option>
+          <option value="az">Name A to Z</option>
+          <option value="za">Name Z to A</option>
+          <option value="most">Most left first</option>
+          <option value="fewest">Fewest left first</option>
+        </select>
+      </div>
       <div id="listGrid" class="list-grid"></div>
       <p id="listsEmpty" class="hint-empty" hidden>No lists yet. Add one below.</p>
       <div class="detail-foot">
@@ -2072,7 +2105,11 @@ dialog select:focus { border-color: var(--accent); outline: none; }
       ? plural(total, 'thing', 'things') + ' to pick from'
       : '';
 
-    for (const list of state.lists) {
+    // Nothing to order until there are two of them.
+    $('sortRow').hidden = state.lists.length < 2;
+    $('listSort').value = state.settings.listSort;
+
+    for (const list of L.sortLists(state.lists, state.settings.listSort)) {
       const card = document.createElement('button');
       card.type = 'button';
       paintColor(card, 'list-card', list.color);
@@ -4117,6 +4154,11 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     changeSetting({ speak: e.target.checked });
     // Say something immediately, so the setting proves itself.
     if (e.target.checked) speakPick('Reading picks aloud');
+  });
+
+  $('listSort').addEventListener('change', (e) => {
+    changeSetting({ listSort: e.target.value });
+    renderLists();
   });
 
   $('dataBtn').addEventListener('click', () => {

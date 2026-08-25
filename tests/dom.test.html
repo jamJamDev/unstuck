@@ -1431,6 +1431,44 @@
     await waitFor(() => app.$('actionsDialog').open, 'the options sheet');
   });
 
+  test('the lists can be sorted, and the choice sticks', async () => {
+    const app = await boot(stateOf([
+      listOf('once', 'Chores', ['Wash up', 'Bins out', 'Hoover']),
+      listOf('once', 'Books', ['Piranesi']),
+    ]));
+    app.$('tabLists').click();
+    // firstChild only: the name div also carries the kind badge.
+    const names = () => [...app.doc.querySelectorAll('#listGrid .list-card .name')].map(
+      (n) => n.firstChild.nodeValue);
+    equal(names().join(', '), 'Chores, Books', 'as added, until asked otherwise');
+
+    const sort = app.$('listSort');
+    equal(shown(app.win, app.$('sortRow')), true, 'two lists is enough to want an order');
+    sort.value = 'az';
+    sort.dispatchEvent(new app.win.Event('change', { bubbles: true }));
+    equal(names().join(', '), 'Books, Chores', 'the grid must actually reorder');
+
+    sort.value = 'most';
+    sort.dispatchEvent(new app.win.Event('change', { bubbles: true }));
+    equal(names().join(', '), 'Chores, Books', 'three left beats one');
+
+    await waitFor(() => stored().settings.listSort === 'most', 'the choice to save');
+    const again = await boot(stored());
+    again.$('tabLists').click();
+    equal(again.$('listSort').value, 'most', 'the control has to show the order it is in');
+    equal([...again.doc.querySelectorAll('#listGrid .list-card .name')].map((n) => n.firstChild.nodeValue).join(', '),
+      'Chores, Books', 'and the grid must come back sorted, not just the control');
+
+    // The stored order is what "as added" means, so sorting may never rewrite it.
+    equal(stored().lists.map((l) => l.name).join(', '), 'Chores, Books', 'the saved order is untouched');
+  });
+
+  test('one list has nothing to sort, so the control stays out of the way', async () => {
+    const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
+    app.$('tabLists').click();
+    equal(shown(app.win, app.$('sortRow')), false, 'a sort over one row is noise');
+  });
+
   test('the tip jar leaves the app safely, and stays at the bottom of Settings', async () => {
     const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
     app.$('dataBtn').click();

@@ -6,28 +6,19 @@ this is state and direction only.
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-115 unit checks (`./test.sh`) and 88 browser checks (`./test.sh --browser`) passing.
+123 unit checks (`./test.sh`) and 90 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
 switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
 settings.
 
-**Uncommitted:** the app's own colour is now a setting — the same eight swatches and the same wheel a
-list gets. The wheel moved into its own dialog with two owners rather than being duplicated, and the
-hex box now takes `rgb()` as well. One accent is stored; the gradient ends and the ink on top are
-derived, so nothing can drift out of step with it.
+**Uncommitted:** a **Sort** control above the list grid — as added, by name either way, or by how
+many things are left. It sorts a copy, so the stored order still means "as added" and comes back
+whenever that is chosen. It appears at two lists and hides at one.
 
-Also uncommitted: the list's **⋯ Options** control became a labelled pill in the list's colour. It was
-a bare grey glyph 8px from the app's gear, in the same corner and the same grey, and the gear kept
-catching the thumb aimed at it. Colour alone would have fixed one of the four things that made them
-look alike; the pill differs in shape, size, colour and content. The sheet's first row now reads
-"Edit list details" rather than "Edit name, kind and colour".
-
-Also uncommitted, an accessibility round — a legibility floor for custom list colours, 24px-minimum
-touch targets in list rows, "Match phone" for contrast, and the dead CSS from the old kind picker
-removed.
-
-The week-of-use round before it (`88bf31f`..`db0ec62`) landed drag-to-reorder alongside
+The round before it (`213efb5`) made the app's own colour a setting and turned the list's ⋯ Options
+control into a labelled pill in the list's colour; `46d3b95` before that was an accessibility round.
+The week-of-use round (`88bf31f`..`db0ec62`) landed drag-to-reorder alongside
 drag-to-nest, an escape from the standalone timer ask, a Custom timer length, and the Ko-fi tip jar.
 Git holds the detail; two lessons from it are worth keeping here:
 
@@ -104,6 +95,10 @@ plan. Only the code is public; lists live in each device's storage and never lea
   consent prompt, privacy policy) for a few dollars a month at realistic install numbers. A paid
   timer fails differently: time-boxing is core to getting unstuck, so charging for it reads as
   "why isn't that just free". The tip unlocks nothing on purpose.
+- **Sorting the grid is a view, never a rewrite.** "As added" is the only order the user controls
+  directly, so a sort returns a copy and the stored array is left alone. Ties break on the name for
+  the same reason a picker needs a seed: two lists with three things left must not swap places
+  between renders.
 - **A colour is lifted for text, never replaced.** The wheel can produce a colour that cannot be read
   on the card, and refusing it would make the wheel feel broken. The chosen colour still paints edges
   and dots; only its text reading is raised to 4.5:1, as `--list-ink`.
