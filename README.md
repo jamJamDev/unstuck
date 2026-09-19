@@ -25,7 +25,7 @@ the browser only — for a real "Add to Home Screen" install, host the folder on
 Netlify.
 
 **Editing gotcha:** `sw.js` is network-first, but browsers still cache aggressively. After an edit,
-hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v11`), or load with a `?v=N`
+hard-refresh, or bump `CACHE` in `sw.js` (currently `unstuck-v13`), or load with a `?v=N`
 cache-buster. If a change seems not to apply, this is almost always why.
 
 ## Layout
@@ -62,20 +62,22 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (123 checks, `node --test`, zero dependencies) — validation and coercion
+- **`tests/logic.test.js`** (138 checks, `node --test`, zero dependencies) — validation and coercion
   in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
   selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
-  directions, every nest / move / promote / reorder, and the pick algorithm with an injected RNG so
-  every branch is deterministic.
-- **`tests/dom.test.html`** (90 checks) — loads the real app in an iframe with real CSS and real
+  directions, every nest / move / promote / reorder, the search fold and its map back to the original
+  text, and the pick algorithm with an injected RNG so every branch is deterministic.
+- **`tests/dom.test.html`** (103 checks) — loads the real app in an iframe with real CSS and real
   `localStorage`. This is where wiring bugs live: that `hidden` elements are actually not displayed,
   that focus survives a chip toggle, that a rename reaches every label, that the starter picker adds
   only what was checked, that a kind change keeps every item, that the two display switches are
   genuinely independent, that a long press opens a list's options while a tap opens the list, that
   subtasks reach the card and never the pool, that a held row dropped on the middle of another files
   itself in while the same row dropped on an edge lands beside it, that an ongoing list reorders the
-  same way with its tallies intact, that a held row that never moves changes nothing, that corrupt
-  saved data warns instead of starting silently empty.
+  same way with its tallies intact, that a held row that never moves changes nothing, that a search
+  result opens its list with the right row marked and that the mark does not outlive the trip, that a
+  list writing markup into its own items never has it parsed, that corrupt saved data warns instead of
+  starting silently empty.
 
 Both suites were mutation-checked — the behaviour each one guards was deliberately broken to confirm
 the right test turns red. The **card's** swipe is the one gesture neither covers: it needs a real
@@ -141,6 +143,18 @@ either way, or by how many things are left to pick — most first or fewest firs
 reorder: `sortLists` returns a sorted copy and the stored order is never rewritten, so "As added"
 always comes back. Lists of equal size fall back to their names, so the grid cannot shuffle between
 renders. The choice is a setting, so it survives a reload.
+
+**Searching the lists.** A search box sits above the grid as soon as anything has been written down
+anywhere, and answers the question the Lists screen otherwise cannot: *which list was that on?* Typing
+replaces the grid with the matches, grouped under the list each one is in — tap the list to open it,
+or tap the match itself to open the list with that row outlined and scrolled to. It reaches the
+names of lists, the things in them, and the steps inside those (a step says whose step it is), and it
+includes finished things, because checking something off does not unwrite it. Matching folds case and
+accents and collapses repeated spaces, so `cafe` finds *Café*; the run that matched is highlighted in
+the original text through an index map back from the folded string, which is why the highlight lands
+on the real characters rather than the folded ones. Escape or the **×** clears it, and leaving the
+Lists tab ends it — a stale search on the way back in would look like missing lists. Nothing about a
+search is stored: it is a way of looking, not part of the data.
 
 **Starter lists** (offered on a first run, and any time from the Lists screen) are themed, with the
 kind that suits them already set: Around the house, Productive, Creative, Get outside, Rest, Learn

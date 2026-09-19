@@ -621,6 +621,96 @@ var UnstuckLogic = (() => {
       : (a, b) => size(b, a) || byName(a, b));
   }
 
+  // ----------------------------------------------------------------- search
+
+  /**
+   * Text prepared for searching, plus a map from each folded character back to
+   * where it came from. Case is folded, accents are dropped and runs of
+   * whitespace become one space, so "Café  au lait" is found by "cafe au". The
+   * map is what lets a result highlight the matched run inside the original.
+   */
+  function foldForSearch(text) {
+    const src = String(text == null ? '' : text);
+    let out = '';
+    const map = [];
+    for (let i = 0; i < src.length; i++) {
+      const ch = src.charAt(i);
+      if (/\s/.test(ch)) {
+        // Leading and repeated whitespace say nothing about what was written.
+        if (out && out.charAt(out.length - 1) !== ' ') {
+          out += ' ';
+          map.push(i);
+        }
+        continue;
+      }
+      // Decomposing is the expensive half of this, and it runs over every list on
+      // every keystroke \u2014 ASCII cannot carry a diacritic to strip, so it skips it.
+      const folded = ch.charCodeAt(0) < 128
+        ? ch.toLowerCase()
+        : ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      for (let k = 0; k < folded.length; k++) {
+        out += folded.charAt(k);
+        map.push(i);
+      }
+    }
+    if (out.charAt(out.length - 1) === ' ') {
+      out = out.slice(0, -1);
+      map.pop();
+    }
+    // One past the end, so the end of a match that runs to the end still maps.
+    map.push(src.length);
+    return { text: out, map };
+  }
+
+  /**
+   * Where `query` sits inside `text`, as a range into the original string, or
+   * null when it is not in there at all. Folding means the range can be a
+   * different length from the query that found it.
+   */
+  function matchRange(text, query) {
+    const needle = foldForSearch(query).text;
+    if (!needle) return null;
+    const hay = foldForSearch(text);
+    const at = hay.text.indexOf(needle);
+    if (at === -1) return null;
+    return { start: hay.map[at], end: hay.map[at + needle.length] };
+  }
+
+  /**
+   * Everything matching `query`, grouped by the list it is in — the answer to
+   * "which list was that on". A list is a group when its own name matches, when
+   * one of its things does, or when one of their steps does, so a thing filed
+   * under another is still findable. Finished things count: a checked item is
+   * still something you might be hunting for.
+   */
+  function searchLists(lists, query) {
+    if (!foldForSearch(query).text) return [];
+    const groups = [];
+    for (const list of lists) {
+      const hits = [];
+      for (const item of list.items) {
+        if (matchRange(item.text, query)) {
+          hits.push({ itemId: item.id, subId: null, text: item.text, done: Boolean(item.done), parent: null });
+        }
+        for (const sub of item.subs) {
+          if (matchRange(sub.text, query)) {
+            hits.push({ itemId: item.id, subId: sub.id, text: sub.text, done: Boolean(sub.done), parent: item.text });
+          }
+        }
+      }
+      const nameMatch = Boolean(matchRange(list.name, query));
+      if (nameMatch || hits.length) groups.push({ list, nameMatch, hits });
+    }
+    return groups;
+  }
+
+  /**
+   * How many results a search actually put on the screen. A list matched by its
+   * own name is one of them — it is a row you can tap, so counting only the
+   * things inside would report a search that found something as finding nothing.
+   */
+  const countMatches = (groups) => groups.reduce((n, g) => n + g.hits.length + (g.nameMatch ? 1 : 0), 0);
+
   /** No selection means every list is in play. */
   function activeLists(state) {
     if (!state.selection.length) return state.lists;
@@ -730,6 +820,7 @@ var UnstuckLogic = (() => {
     setDone, logSession, subsDone, allSubsDone, setSubsDone, setDoneWithSubs, syncFromSubs,
     subFromItem, nestItem, moveSub, promoteSub, moveItemBeside, moveSubBeside,
     listById, isPickable, pickableCount, activeLists, pool, LIST_SORTS, sortLists,
+    foldForSearch, matchRange, searchLists, countMatches,
     recentDepth, chooseFrom, pushHistory,
     plural, relativeDay, listSummary, cardMeta,
   };

@@ -437,6 +437,106 @@ main {
 .section-head h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; }
 .section-head .sub { color: var(--muted); font-size: 0.8125rem; }
 
+/* Finding something you wrote down is a question about every list at once, so it
+   is asked here rather than inside any one of them. */
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.search-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9375rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.search-row input::placeholder { color: #6d7688; }
+.search-row input:focus { border-color: var(--accent); outline: none; }
+/* WebKit draws its own clear button inside a search field; ours is the one with
+   a real target size and a label, so the built-in is taken off. */
+.search-row input::-webkit-search-cancel-button,
+.search-row input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+.search-clear {
+  flex: none;
+  min-width: 42px;
+  min-height: 42px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 1.125rem;
+  line-height: 1;
+}
+.search-clear:hover { color: var(--text); }
+
+.search-count {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.search-count:empty { display: none; }
+
+.results { display: flex; flex-direction: column; gap: 14px; }
+.result-group { display: flex; flex-direction: column; gap: 6px; }
+
+/* The list a run of results belongs to — the thing the search was asked for. */
+.result-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--list-color, var(--accent));
+  border-radius: 12px;
+  color: var(--list-ink, var(--list-color, var(--accent)));
+  font-size: 0.9375rem;
+  font-weight: 640;
+}
+.result-list:hover { border-color: #3c4553; }
+.result-list .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.result-list .chev { color: var(--muted); font-size: 1.125rem; flex: none; }
+
+/* Indented under the list it was found in, so the eye reads the list first and
+   the things it holds second. The indent is a margin, so the row may not also
+   claim a full width — it would push its own right edge off the card. */
+.result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 9px 10px 9px 14px;
+  margin-left: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: inherit;
+  font-size: 0.9375rem;
+}
+.result:hover { border-color: #3c4553; }
+.result .text { max-width: 100%; overflow-wrap: anywhere; }
+.result.checked .text { color: var(--muted); text-decoration: line-through; }
+.result .under { max-width: 100%; color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+
+.results mark {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
 /* Ordering is a view of the lists, not a property of them, so it sits above the
    grid it reorders rather than inside Settings with the app-wide choices. */
 .sort-row {
@@ -694,6 +794,16 @@ main {
 .item.drop-into {
   outline: 2px solid var(--list-color, var(--accent));
   outline-offset: -1px;
+  background: var(--surface-2);
+}
+
+/* Arriving from a search result: the row that was asked for says so. The mark is
+   held rather than timed out — the next render drops it, so it lasts exactly as
+   long as the trip that caused it and never needs a clock to take it away. */
+.item.found, .subs li.found {
+  outline: 2px solid var(--list-color, var(--accent));
+  outline-offset: 1px;
+  border-radius: 12px;
   background: var(--surface-2);
 }
 
@@ -1442,6 +1552,12 @@ dialog select:focus { border-color: var(--accent); outline: none; }
         <h2 id="listsHeading">Your lists</h2>
         <span id="listsSub" class="sub"></span>
       </div>
+      <div class="search-row" id="searchRow" hidden>
+        <label class="sr-only" for="listSearch">Search your lists</label>
+        <input id="listSearch" type="search" autocomplete="off" spellcheck="false"
+               placeholder="Search everything you have written down">
+        <button type="button" id="searchClear" class="search-clear" aria-label="Clear the search" hidden>×</button>
+      </div>
       <div class="sort-row" id="sortRow" hidden>
         <label for="listSort">Sort</label>
         <select id="listSort">
@@ -1452,8 +1568,11 @@ dialog select:focus { border-color: var(--accent); outline: none; }
           <option value="fewest">Fewest left first</option>
         </select>
       </div>
+      <p id="searchCount" class="search-count" role="status"></p>
       <div id="listGrid" class="list-grid"></div>
+      <div id="searchResults" class="results" hidden></div>
       <p id="listsEmpty" class="hint-empty" hidden>No lists yet. Add one below.</p>
+      <p id="searchEmpty" class="hint-empty" hidden></p>
       <div class="detail-foot">
         <button id="starterBtn" class="btn">Starter lists</button>
         <button id="newListBtn" class="btn primary">New list</button>
@@ -1764,6 +1883,9 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   let ui = {
     tab: 'decide', openListId: null, editingListId: null, actionsListId: null,
     addingSubTo: null, subDraft: '', draftColor: COLORS[0],
+    // What is typed into the search box, and the row a result asked to be shown.
+    // Neither is saved: a search is a way of looking, not part of the lists.
+    query: '', found: null,
   };
   let session = { shown: new Set(), current: null, settled: false, gen: 0, timerAsk: false };
   let pendingUndo = null;
@@ -1943,21 +2065,46 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   function setTab(tab) {
     if (tab === 'decide' && ui.openListId) closeListDetail();
     ui.tab = tab;
-    if (tab === 'decide') ui.openListId = null;
+    // Leaving the lists behind ends the search that was asked of them.
+    if (tab === 'decide') {
+      ui.openListId = null;
+      ui.query = '';
+    }
     renderAll();
     const target = tab === 'decide' ? $('tabDecide') : $('tabLists');
     target.focus();
   }
 
-  function openList(id) {
+  /**
+   * Opens a list, optionally on a particular thing: a search result hands over
+   * the hit it was standing for, and that row is marked and scrolled to.
+   */
+  function openList(id, hit) {
     closeSubInput();
     ui.openListId = id;
     ui.tab = 'lists';
+    ui.found = hit ? { itemId: hit.itemId, subId: hit.subId } : null;
     // A history entry so Android's back gesture leaves the list rather than the
     // app. Chrome already closes dialogs on back, so only this layer needs it.
     history.pushState({ unstuckList: id }, '');
     renderAll();
     document.querySelector('main').scrollTop = 0;
+    revealFound();
+    // One render's worth of mark: anything that repaints the list takes it away.
+    ui.found = null;
+  }
+
+  /** Brings the row a search result pointed at into view, once it is on screen. */
+  function revealFound() {
+    if (!ui.found) return;
+    const wanted = ui.found.subId || ui.found.itemId;
+    const key = ui.found.subId ? 'sub' : 'item';
+    const rows = $('screenList').querySelectorAll('li[data-' + key + ']');
+    for (const row of rows) {
+      if (row.dataset[key] !== wanted) continue;
+      row.scrollIntoView({ block: 'center', behavior: motionOff() ? 'auto' : 'smooth' });
+      return;
+    }
   }
 
   /** Always leave a list through history, so both back routes behave the same. */
@@ -2096,10 +2243,6 @@ dialog select:focus { border-color: var(--accent); outline: none; }
   }
 
   function renderLists() {
-    const grid = $('listGrid');
-    grid.textContent = '';
-    $('listsEmpty').hidden = state.lists.length > 0;
-
     const total = state.lists.reduce((n, l) => n + pickableCount(l), 0);
     $('listsSub').textContent = state.lists.length
       ? plural(total, 'thing', 'things') + ' to pick from'
@@ -2109,7 +2252,114 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     $('sortRow').hidden = state.lists.length < 2;
     $('listSort').value = state.settings.listSort;
 
-    for (const list of L.sortLists(state.lists, state.settings.listSort)) {
+    // Nothing written down anywhere is nothing to search.
+    const searchable = state.lists.some((l) => l.items.length > 0);
+    if (!searchable) ui.query = '';
+    $('searchRow').hidden = !searchable;
+    const box = $('listSearch');
+    // Only ever written when it actually differs, so typing is never interrupted.
+    if (box.value !== ui.query) box.value = ui.query;
+    $('searchClear').hidden = ui.query === '';
+
+    const ordered = L.sortLists(state.lists, state.settings.listSort);
+    const groups = L.searchLists(ordered, ui.query);
+    const searching = Boolean(L.foldForSearch(ui.query).text);
+
+    $('listGrid').hidden = searching;
+    $('searchResults').hidden = !searching;
+    $('listsEmpty').hidden = state.lists.length > 0 || searching;
+
+    if (searching) renderSearchResults(groups);
+    else renderListGrid(ordered);
+  }
+
+  function renderSearchResults(groups) {
+    const box = $('searchResults');
+    box.textContent = '';
+
+    $('searchCount').textContent = groups.length
+      ? plural(L.countMatches(groups), 'match', 'matches') + ' in ' + plural(groups.length, 'list', 'lists')
+      : '';
+
+    const empty = $('searchEmpty');
+    empty.hidden = groups.length > 0;
+    empty.textContent = 'Nothing here matches “' + ui.query.trim() + '”.';
+
+    for (const group of groups) {
+      const section = document.createElement('div');
+      section.className = 'result-group';
+
+      const head = document.createElement('button');
+      head.type = 'button';
+      paintColor(head, 'result-list', group.list.color);
+      head.setAttribute('aria-label', 'Open ' + group.list.name);
+      head.addEventListener('click', () => openList(group.list.id));
+      const name = document.createElement('span');
+      name.className = 'name';
+      // The list's own name is only marked up when it is what matched.
+      appendMatched(name, group.list.name, group.nameMatch ? ui.query : '');
+      head.appendChild(name);
+      const chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.setAttribute('aria-hidden', 'true');
+      chev.textContent = '›';
+      head.appendChild(chev);
+      section.appendChild(head);
+
+      for (const hit of group.hits) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'result' + (hit.done && group.list.kind !== 'endless' ? ' checked' : '');
+        row.dataset.hit = hit.subId || hit.itemId;
+        // Read on its own, a result has to say which list it came from — the
+        // heading above it is not part of the button.
+        row.setAttribute('aria-label', hit.text
+          + (hit.parent ? ', a step of ' + hit.parent : '')
+          + ', in ' + group.list.name);
+        row.addEventListener('click', () => openList(group.list.id, hit));
+
+        const text = document.createElement('span');
+        text.className = 'text';
+        appendMatched(text, hit.text, ui.query);
+        row.appendChild(text);
+
+        if (hit.parent) {
+          const under = document.createElement('span');
+          under.className = 'under';
+          under.setAttribute('aria-hidden', 'true');
+          under.textContent = 'step of ' + hit.parent;
+          row.appendChild(under);
+        }
+        section.appendChild(row);
+      }
+      box.appendChild(section);
+    }
+  }
+
+  /**
+   * The text with the run that matched wrapped in a `mark`, built out of nodes
+   * so a list's own words are never handed to the parser as markup.
+   */
+  function appendMatched(el, text, query) {
+    const range = query ? L.matchRange(text, query) : null;
+    if (!range) {
+      el.textContent = text;
+      return;
+    }
+    el.appendChild(document.createTextNode(text.slice(0, range.start)));
+    const hit = document.createElement('mark');
+    hit.textContent = text.slice(range.start, range.end);
+    el.appendChild(hit);
+    el.appendChild(document.createTextNode(text.slice(range.end)));
+  }
+
+  function renderListGrid(ordered) {
+    const grid = $('listGrid');
+    grid.textContent = '';
+    $('searchCount').textContent = '';
+    $('searchEmpty').hidden = true;
+
+    for (const list of ordered) {
       const card = document.createElement('button');
       card.type = 'button';
       paintColor(card, 'list-card', list.color);
@@ -2237,7 +2487,8 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     const row = document.createElement('li');
     // An ongoing list has no notion of finished, so it never strikes anything out
     // even though `done` is still carried underneath for the other kinds.
-    row.className = 'item' + (item.done && list.kind !== 'endless' ? ' checked' : '');
+    const marked = ui.found && !ui.found.subId && ui.found.itemId === item.id;
+    row.className = 'item' + (item.done && list.kind !== 'endless' ? ' checked' : '') + (marked ? ' found' : '');
     row.dataset.item = item.id;
     row.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown Control+ArrowRight');
 
@@ -2333,7 +2584,8 @@ dialog select:focus { border-color: var(--accent); outline: none; }
     box.className = 'subs';
     for (const sub of item.subs) {
       const li = document.createElement('li');
-      li.className = sub.done ? 'checked' : '';
+      const marked = ui.found && ui.found.subId === sub.id;
+      li.className = (sub.done ? 'checked' : '') + (marked ? ' found' : '');
       li.dataset.sub = sub.id;
       li.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown Control+ArrowLeft');
 
@@ -4158,6 +4410,27 @@ dialog select:focus { border-color: var(--accent); outline: none; }
 
   $('listSort').addEventListener('change', (e) => {
     changeSetting({ listSort: e.target.value });
+    renderLists();
+  });
+
+  // Searching is over what is already in memory, so it answers as fast as it is
+  // typed — a delay here would only make the results feel detached from the keys.
+  $('listSearch').addEventListener('input', (e) => {
+    ui.query = e.target.value;
+    renderLists();
+  });
+
+  $('searchClear').addEventListener('click', () => {
+    ui.query = '';
+    renderLists();
+    $('listSearch').focus();
+  });
+
+  $('listSearch').addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !ui.query) return;
+    // A search field clears itself on Escape in some browsers and not others, and
+    // it does it without an `input` event. Doing it here makes it both.
+    ui.query = '';
     renderLists();
   });
 

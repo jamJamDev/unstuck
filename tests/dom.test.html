@@ -1469,6 +1469,173 @@
     equal(shown(app.win, app.$('sortRow')), false, 'a sort over one row is noise');
   });
 
+  /** Types into the search box the way a keyboard does: value, then the event. */
+  function search(app, text) {
+    const box = app.$('listSearch');
+    box.value = text;
+    box.dispatchEvent(new app.win.Event('input', { bubbles: true }));
+  }
+
+  const resultTexts = (app) => [...app.doc.querySelectorAll('#searchResults .result .text')]
+    .map((el) => el.textContent);
+  const resultLists = (app) => [...app.doc.querySelectorAll('#searchResults .result-list .name')]
+    .map((el) => el.textContent);
+
+  /** Two lists and a step, which is every place a thing can be hiding. */
+  function searchState() {
+    const admin = listOf('once', 'Admin', ['Pay that bill', 'Renew the passport']);
+    admin.items[1].subs = [{ id: 'sub-signup', text: 'Sign up for an account', done: false }];
+    return stateOf([admin, listOf('once', 'House', ['Wash up', 'Sign for the parcel'])]);
+  }
+
+  test('searching the lists says which list a thing is on', async () => {
+    const app = await boot(searchState());
+    app.$('tabLists').click();
+    equal(shown(app.win, app.$('searchRow')), true, 'there is plenty written down to search');
+    equal(shown(app.win, app.$('listGrid')), true, 'the grid is what you see before you ask');
+
+    search(app, 'sign up for');
+    equal(shown(app.win, app.$('listGrid')), false, 'results replace the grid, not crowd it');
+    equal(resultLists(app).join(', '), 'Admin', 'the list it is on is the whole answer');
+    equal(resultTexts(app).join(', '), 'Sign up for an account');
+    equal(app.$('searchCount').textContent, '1 match in 1 list');
+  });
+
+  test('one query reaching two lists shows both, grouped', async () => {
+    const app = await boot(searchState());
+    app.$('tabLists').click();
+    search(app, 'sign');
+    equal(resultLists(app).join(', '), 'Admin, House', 'both lists have one');
+    equal(resultTexts(app).join(' | '), 'Sign up for an account | Sign for the parcel');
+    equal(app.$('searchCount').textContent, '2 matches in 2 lists');
+  });
+
+  test('a step says whose step it is, and opening it marks that step', async () => {
+    const app = await boot(searchState());
+    app.$('tabLists').click();
+    search(app, 'sign up');
+    const row = app.doc.querySelector('#searchResults .result');
+    equal(row.querySelector('.under').textContent, 'step of Renew the passport');
+    equal(row.getAttribute('aria-label'),
+      'Sign up for an account, a step of Renew the passport, in Admin',
+      'read on its own, a result still has to name its list');
+
+    row.click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    const found = app.doc.querySelectorAll('#screenList li.found');
+    equal(found.length, 1, 'exactly one row may be marked');
+    equal(found[0].dataset.sub, 'sub-signup', 'and it has to be the step that was asked for');
+  });
+
+  test('opening a result marks the thing itself, and the next render lets it go', async () => {
+    const app = await boot(searchState());
+    app.$('tabLists').click();
+    search(app, 'parcel');
+    app.doc.querySelector('#searchResults .result').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    const marked = app.doc.querySelector('#screenList li.found');
+    equal(marked.dataset.item, 'House-1');
+
+    // Checking it off repaints the list, which is where the mark is supposed to go.
+    marked.querySelector('.check').click();
+    equal(app.doc.querySelector('#screenList li.found'), null, 'the mark must not outlive the trip');
+  });
+
+  test('tapping the list a result sits under opens that list, unmarked', async () => {
+    const app = await boot(searchState());
+    app.$('tabLists').click();
+    search(app, 'sign');
+    app.doc.querySelector('#searchResults .result-list').click();
+    await waitFor(() => shown(app.win, app.$('screenList')), 'the list detail');
+    equal(app.$('detailTitle').lastElementChild.textContent, 'Admin');
+    equal(app.doc.querySelector('#screenList li.found'), null, 'no one thing was asked for');
+  });
+
+  test('the run that matched is marked, and a list’s own words are never markup', async () => {
+    const app = await boot(stateOf([listOf('once', 'Admin', ['Email <b>bold</b> Sam'])]));
+    app.$('tabLists').click();
+    search(app, '<b>bold');
+    const text = app.doc.querySelector('#searchResults .result .text');
+    equal(text.textContent, 'Email <b>bold</b> Sam', 'the text has to survive intact');
+    equal(text.querySelector('mark').textContent, '<b>bold', 'the matched run is what gets marked');
+    equal(text.querySelector('b'), null, 'a list that writes markup must never have it parsed');
+  });
+
+  test('a search ignores case and accents, so what you typed is close enough', async () => {
+    const app = await boot(stateOf([listOf('once', 'Admin', ['Book a café table'])]));
+    app.$('tabLists').click();
+    search(app, 'CAFE');
+    equal(resultTexts(app).join(', '), 'Book a café table');
+    equal(app.doc.querySelector('#searchResults mark').textContent, 'café',
+      'the mark must land on the real characters, not the folded ones');
+  });
+
+  test('a checked-off thing is still findable, and shows as checked', async () => {
+    const state = stateOf([listOf('once', 'Admin', ['Sign the form'])], []);
+    state.lists[0].keepDone = true;
+    state.lists[0].items[0].done = true;
+    const app = await boot(state);
+    app.$('tabLists').click();
+    search(app, 'sign');
+    const row = app.doc.querySelector('#searchResults .result');
+    equal(row.textContent.includes('Sign the form'), true, 'finishing it does not unwrite it');
+    equal(row.classList.contains('checked'), true, 'and the result has to say it is done');
+  });
+
+  test('a list found by its own name is offered, and counted', async () => {
+    const app = await boot(searchState());
+    app.$('tabLists').click();
+    search(app, 'house');
+    equal(resultLists(app).join(', '), 'House');
+    equal(resultTexts(app).length, 0, 'nothing written down in it says "house"');
+    equal(app.$('searchCount').textContent, '1 match in 1 list',
+      'a row on the screen may never be reported as no matches');
+    equal(app.doc.querySelector('#searchResults .result-list').getAttribute('aria-label'),
+      'Open House', 'a bare name among results has to say what tapping it does');
+  });
+
+  test('a search that finds nothing says so rather than showing an empty screen', async () => {
+    const app = await boot(searchState());
+    app.$('tabLists').click();
+    search(app, 'kayak');
+    equal(app.doc.querySelectorAll('#searchResults .result').length, 0);
+    equal(shown(app.win, app.$('searchEmpty')), true);
+    equal(app.$('searchEmpty').textContent, 'Nothing here matches “kayak”.');
+    equal(app.$('searchCount').textContent, '', 'no count belongs on nothing');
+  });
+
+  test('clearing the search gives the lists back', async () => {
+    const app = await boot(searchState());
+    app.$('tabLists').click();
+    equal(shown(app.win, app.$('searchClear')), false, 'nothing to clear yet');
+
+    search(app, 'sign');
+    equal(shown(app.win, app.$('searchClear')), true);
+    app.$('searchClear').click();
+
+    equal(app.$('listSearch').value, '', 'the box has to empty with it');
+    equal(shown(app.win, app.$('listGrid')), true, 'the grid comes back');
+    equal(shown(app.win, app.$('searchResults')), false);
+    equal(app.doc.activeElement === app.$('listSearch') || app.doc.activeElement.id === 'listSearch',
+      true, 'clearing leaves you ready to type the next one');
+  });
+
+  test('leaving the lists behind ends the search', async () => {
+    const app = await boot(searchState());
+    app.$('tabLists').click();
+    search(app, 'sign');
+    app.$('tabDecide').click();
+    app.$('tabLists').click();
+    equal(app.$('listSearch').value, '', 'a stale search would hide the lists on the way back in');
+    equal(shown(app.win, app.$('listGrid')), true);
+  });
+
+  test('nothing written down anywhere is nothing to search', async () => {
+    const app = await boot(stateOf([listOf('once', 'Admin', [])]));
+    app.$('tabLists').click();
+    equal(shown(app.win, app.$('searchRow')), false, 'an empty list gives a search nothing to do');
+  });
+
   test('the tip jar leaves the app safely, and stays at the bottom of Settings', async () => {
     const app = await boot(stateOf([listOf('once', 'Chores', ['Wash up'])]));
     app.$('dataBtn').click();

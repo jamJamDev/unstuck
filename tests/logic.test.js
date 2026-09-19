@@ -525,6 +525,115 @@ test('every sort the settings accept is one the picker offers a name for', () =>
   assert.equal(L.normalizeSettings({ listSort: 'sideways' }).listSort, 'added');
 });
 
+// ------------------------------------------------------------------ search
+
+const searchFixtures = () => [
+  list('Admin', 'once', [item('Pay that bill'), withSubs(item('Get the car serviced'), 'Sign up for an account')]),
+  list('Around the house', 'once', [item('Wash up'), item('Sign the form')]),
+];
+
+test('folding a string for search drops case, accents and repeated spaces', () => {
+  assert.equal(L.foldForSearch('  Café   AU  Lait ').text, 'cafe au lait');
+  assert.equal(L.foldForSearch('').text, '');
+  assert.equal(L.foldForSearch('   ').text, '', 'whitespace alone is not a search');
+  assert.equal(L.foldForSearch(null).text, '');
+});
+
+test('a match maps back to where it sits in the original text', () => {
+  // The fold is shorter than the original here — two spaces became one, and the
+  // accent decomposed — so an index taken from the folded string would be wrong.
+  const range = L.matchRange('Book a  café table', 'cafe');
+  assert.deepEqual(range, { start: 8, end: 12 });
+  assert.equal('Book a  café table'.slice(range.start, range.end), 'café');
+});
+
+test('a match that runs to the end of the text still has an end', () => {
+  const range = L.matchRange('Wash up', 'up');
+  assert.deepEqual(range, { start: 5, end: 7 });
+});
+
+test('matchRange refuses what is not in there, and refuses an empty query', () => {
+  assert.equal(L.matchRange('Wash up', 'dishes'), null);
+  assert.equal(L.matchRange('Wash up', ''), null);
+  assert.equal(L.matchRange('Wash up', '   '), null, 'spaces must not match everything');
+});
+
+test('a search says which list a thing is on', () => {
+  const groups = L.searchLists(searchFixtures(), 'sign up for');
+  assert.equal(groups.length, 1, 'only one list has it');
+  assert.equal(groups[0].list.name, 'Admin');
+  assert.equal(groups[0].hits.length, 1);
+  assert.equal(groups[0].hits[0].text, 'Sign up for an account');
+});
+
+test('a step is findable, and names the thing it is a step of', () => {
+  const hit = L.searchLists(searchFixtures(), 'account')[0].hits[0];
+  assert.equal(hit.subId !== null, true, 'the hit must point at the step itself');
+  assert.equal(hit.parent, 'Get the car serviced');
+});
+
+test('a thing standing on its own carries no parent', () => {
+  const hit = L.searchLists(searchFixtures(), 'wash up')[0].hits[0];
+  assert.equal(hit.subId, null);
+  assert.equal(hit.parent, null);
+});
+
+test('one query can land in several lists at once', () => {
+  const groups = L.searchLists(searchFixtures(), 'sign');
+  assert.deepEqual(groups.map((g) => g.list.name), ['Admin', 'Around the house']);
+  assert.equal(L.countMatches(groups), 2, 'both the step and the item must count');
+});
+
+test('a list whose own name matches is offered even with nothing in it that does', () => {
+  const groups = L.searchLists(searchFixtures(), 'around the house');
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].nameMatch, true);
+  assert.deepEqual(groups[0].hits, [], 'nothing in it says "around the house"');
+});
+
+test('a list matched only through its contents is not marked as a name match', () => {
+  assert.equal(L.searchLists(searchFixtures(), 'wash up')[0].nameMatch, false);
+});
+
+test('finished things are still findable — checking one off does not hide it', () => {
+  const rows = [list('Done pile', 'once', [item('Sign up for an account', { done: true })])];
+  const hit = L.searchLists(rows, 'sign up')[0].hits[0];
+  assert.equal(hit.done, true, 'the result has to be able to show it as checked off');
+});
+
+test('an empty query finds nothing rather than everything', () => {
+  for (const query of ['', '   ', null, undefined]) {
+    assert.deepEqual(L.searchLists(searchFixtures(), query), [],
+      'returned results for ' + JSON.stringify(query));
+  }
+});
+
+test('results keep the order they were handed, so a sort upstream holds', () => {
+  const rows = L.sortLists(searchFixtures(), 'za');
+  assert.deepEqual(L.searchLists(rows, 'sign').map((g) => g.list.name),
+    ['Around the house', 'Admin']);
+});
+
+test('countMatches counts the things found, not the lists they were found in', () => {
+  assert.equal(L.countMatches([]), 0);
+  // Two lists, three hits — a count of lists would read 2 and a count of groups
+  // with any hit would read 2 as well, so only the real tally passes here.
+  const rows = [
+    list('Admin', 'once', [item('Sign the form'), withSubs(item('Renew it'), 'Sign in first')]),
+    list('House', 'once', [item('Sign for the parcel')]),
+  ];
+  assert.equal(L.countMatches(L.searchLists(rows, 'sign')), 3);
+});
+
+test('a list found by its own name counts as one of the matches', () => {
+  // Otherwise a search that put a row on the screen reports finding nothing.
+  const rows = [list('Signatures', 'once', [item('Wash up')])];
+  assert.equal(L.countMatches(L.searchLists(rows, 'sign')), 1);
+  // And it is counted alongside the things inside, not instead of them.
+  const both = [list('Signatures', 'once', [item('Sign the form')])];
+  assert.equal(L.countMatches(L.searchLists(both, 'sign')), 2);
+});
+
 test('listById returns null for an unknown id rather than undefined', () => {
   assert.equal(L.listById(stateWith([]), 'nope'), null);
 });
