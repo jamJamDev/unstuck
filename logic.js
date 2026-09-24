@@ -33,6 +33,22 @@ var UnstuckLogic = (() => {
   const HISTORY_LIMIT = 40;
   const MAX_RECENT_AVOIDED = 5;
 
+  /**
+   * The caps the edit fields already impose, restated for payloads that arrive
+   * from a file instead of a keyboard. Nothing longer or more numerous than these
+   * could have been made in the app, so `migrate` clamps rather than refuses: one
+   * absurd field must not cost you the rest of a backup. The counts sit far above
+   * any real use — they exist so a hostile or corrupt file cannot hand the
+   * renderer a million rows or a five-megabyte string.
+   */
+  const MAX_NAME_LENGTH = 60;
+  const MAX_TEXT_LENGTH = 200;
+  const MAX_LISTS = 500;
+  const MAX_ITEMS_PER_LIST = 2000;
+  const MAX_SUBS_PER_ITEM = 200;
+
+  const capLength = (text, limit) => (text.length > limit ? text.slice(0, limit) : text);
+
   const TIMER_PRESETS = [15, 30, 45, 60];
   const MAX_TIMER_MINUTES = 24 * 60;
 
@@ -293,8 +309,12 @@ var UnstuckLogic = (() => {
 
   /**
    * The single gate every inbound payload passes: page load and backup import
-   * both. Coerces field types, drops unusable items, and throws on anything not
-   * shaped like an Unstuck backup so a bad file cannot corrupt live state.
+   * both. Coerces field types, drops unusable items, clamps every field to the
+   * size the edit fields allow, and throws on anything not shaped like an Unstuck
+   * backup so a bad file cannot corrupt live state.
+   *
+   * Junk is filtered before anything is counted, so malformed entries cannot eat
+   * a list's budget and push real ones out.
    */
   function migrate(data) {
     if (!data || typeof data !== 'object' || !Array.isArray(data.lists)) {
@@ -302,18 +322,20 @@ var UnstuckLogic = (() => {
     }
     const lists = data.lists
       .filter((l) => l && typeof l === 'object')
+      .slice(0, MAX_LISTS)
       .map((l) => ({
         id: typeof l.id === 'string' && l.id ? l.id : uid(),
-        name: String(l.name || 'Untitled list'),
+        name: capLength(String(l.name || 'Untitled list'), MAX_NAME_LENGTH),
         ...resolveKind(l.kind, l.keepDone, l.showProgress),
         color: normalizeColor(l.color) || COLORS[0],
         timerMinutes: normalizeTimerMinutes(l.timerMinutes),
         items: Array.isArray(l.items)
           ? l.items
               .filter((it) => it && typeof it === 'object')
+              .slice(0, MAX_ITEMS_PER_LIST)
               .map((it) => ({
                 id: typeof it.id === 'string' && it.id ? it.id : uid(),
-                text: String(it.text == null ? '' : it.text),
+                text: capLength(String(it.text == null ? '' : it.text), MAX_TEXT_LENGTH),
                 done: Boolean(it.done),
                 doneAt: Number(it.doneAt) || 0,
                 count: Number(it.count) || 0,
@@ -321,9 +343,10 @@ var UnstuckLogic = (() => {
                 subs: Array.isArray(it.subs)
                   ? it.subs
                       .filter((s) => s && typeof s === 'object')
+                      .slice(0, MAX_SUBS_PER_ITEM)
                       .map((s) => ({
                         id: typeof s.id === 'string' && s.id ? s.id : uid(),
-                        text: String(s.text == null ? '' : s.text),
+                        text: capLength(String(s.text == null ? '' : s.text), MAX_TEXT_LENGTH),
                         done: Boolean(s.done),
                       }))
                       .filter((s) => s.text.trim() !== '')
@@ -400,7 +423,8 @@ var UnstuckLogic = (() => {
     return {
       duration,
       endsAt,
-      label: String(raw.label == null ? '' : raw.label),
+      // The label is an item's text, so it is held to an item's length.
+      label: capLength(String(raw.label == null ? '' : raw.label), MAX_TEXT_LENGTH),
       pausedAt: Number.isFinite(pausedAt) && pausedAt > 0 ? pausedAt : 0,
     };
   }
@@ -811,6 +835,7 @@ var UnstuckLogic = (() => {
 
   return {
     SCHEMA, STORE_KEY, COLORS, KIND_LABEL, HISTORY_LIMIT, STARTER_LISTS,
+    MAX_NAME_LENGTH, MAX_TEXT_LENGTH, MAX_LISTS, MAX_ITEMS_PER_LIST, MAX_SUBS_PER_ITEM,
     uid, emptyState, newItem, newSub, newList, listFromStarter, migrate, resolveKind,
     normalizeHex, normalizeColor, isCustomColor, hsvToHex, hexToHsv,
     luminance, contrastRatio, readableOn, shade, inkOn, DEFAULT_ACCENT,

@@ -62,8 +62,9 @@ a banner instead of dying silently.
 
 Two suites, split by what each can actually reach:
 
-- **`tests/logic.test.js`** (138 checks, `node --test`, zero dependencies) — validation and coercion
-  in `migrate` including the schema 1 upgrade and colour validation, pool membership per kind,
+- **`tests/logic.test.js`** (143 checks, `node --test`, zero dependencies) — validation and coercion
+  in `migrate` including the schema 1 upgrade, colour validation and the size clamps on an imported
+  payload, pool membership per kind,
   selection scoping, the starter-list definitions, the done/count linkage, the subtask rule in both
   directions, every nest / move / promote / reorder, the search fold and its map back to the original
   text, and the pick algorithm with an injected RNG so every branch is deterministic.
@@ -363,6 +364,13 @@ three kinds into the current two-plus-two-switches shape, and throws on anything
 like an Unstuck backup, so a bad import can't corrupt live state. A payload with no `subs` at all —
 anything saved before schema 3 — loads with an empty one. It is idempotent, and an upgraded payload is
 written straight back so an old format never lingers in storage.
+
+It also **clamps sizes**, which the edit fields do for anything typed but a file has never met: 60
+characters for a list name, 200 for an item, a step or a timer label, and at most 500 lists, 2,000
+items per list and 200 steps per item. Nothing larger could have been made in the app, so an absurd
+field is trimmed rather than costing you the whole backup — and a corrupt or hostile file cannot hand
+the renderer a million rows or a five-megabyte string. Junk entries are filtered out *before* anything
+is counted, so they can't spend a list's budget and push real entries out.
 
 If saved data can't be parsed, the app says so in a banner and **leaves the bytes alone** — the
 export button writes the raw stored string rather than the in-memory state, so a backup can still

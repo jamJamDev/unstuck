@@ -67,6 +67,56 @@ test('migrate does not let a prototype-polluting kind through', () => {
   assert.equal(out.lists[0].kind, 'once');
 });
 
+// A backup arrives from a file, which never met the edit fields' maxlength. These
+// guard the gap: without the clamps, an imported list can hand the renderer a
+// string or a row count nothing in the app could ever have produced.
+
+test('migrate holds text to the length the edit fields allow', () => {
+  const out = L.migrate({
+    lists: [{
+      name: 'n'.repeat(5000),
+      items: [{ text: 't'.repeat(100000), subs: [{ text: 's'.repeat(100000) }] }],
+    }],
+  });
+  assert.equal(out.lists[0].name.length, L.MAX_NAME_LENGTH);
+  assert.equal(out.lists[0].items[0].text.length, L.MAX_TEXT_LENGTH);
+  assert.equal(out.lists[0].items[0].subs[0].text.length, L.MAX_TEXT_LENGTH);
+});
+
+test('text already within the caps is left exactly as it was', () => {
+  const out = L.migrate({ lists: [{ name: 'Chores', items: [{ text: 'Wash up' }] }] });
+  assert.equal(out.lists[0].name, 'Chores', 'clamping may never trim an ordinary backup');
+  assert.equal(out.lists[0].items[0].text, 'Wash up');
+});
+
+test('migrate bounds how many lists, items and steps a file can carry', () => {
+  const subs = Array.from({ length: L.MAX_SUBS_PER_ITEM + 20 }, (_, i) => ({ text: 'step ' + i }));
+  const items = Array.from({ length: L.MAX_ITEMS_PER_LIST + 20 }, (_, i) => ({ text: 'thing ' + i }));
+  items[0].subs = subs;
+  const lists = Array.from({ length: L.MAX_LISTS + 20 }, (_, i) => ({ name: 'List ' + i, items: [] }));
+  lists[0].items = items;
+
+  const out = L.migrate({ lists });
+  assert.equal(out.lists.length, L.MAX_LISTS);
+  assert.equal(out.lists[0].items.length, L.MAX_ITEMS_PER_LIST);
+  assert.equal(out.lists[0].items[0].subs.length, L.MAX_SUBS_PER_ITEM);
+});
+
+test('junk is dropped before anything is counted, so real entries keep their place', () => {
+  // The unusable entries lead, and there are more of them than the cap allows.
+  // Counting first would spend the whole budget on them and lose every real list.
+  const lists = Array.from({ length: L.MAX_LISTS + 5 }, () => null)
+    .concat([{ name: 'Survivor', items: [] }]);
+  const out = L.migrate({ lists });
+  assert.equal(out.lists.length, 1);
+  assert.equal(out.lists[0].name, 'Survivor');
+});
+
+test('a timer label is held to an item length too — it is an item text', () => {
+  const out = L.migrate({ lists: [], timer: { duration: 60000, endsAt: 123, label: 'x'.repeat(9000) } });
+  assert.equal(out.timer.label.length, L.MAX_TEXT_LENGTH);
+});
+
 test('a schema 1 to-do list keeps behaving exactly as it did', () => {
   const out = L.migrate({
     schema: 1,

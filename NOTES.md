@@ -6,7 +6,7 @@ this is state and direction only.
 ## Status
 
 Shipped and live at **https://jamjamdev.github.io/unstuck/**, deployed from `main` via GitHub Pages.
-138 unit checks (`./test.sh`) and 103 browser checks (`./test.sh --browser`) passing.
+143 unit checks (`./test.sh`) and 103 browser checks (`./test.sh --browser`) passing.
 
 Built so far: the picker with rerolls and swipe, two list kinds plus two independent display
 switches, subtasks, starter lists, custom colours with a wheel, per-list timers, and accessibility
@@ -38,6 +38,21 @@ The repo is **public**, which it had to be — GitHub Pages will not serve a pri
 plan. Only the code is public; lists live in each device's storage and never leave it.
 
 ## Next up
+
+Headed for the Play Store. The code is not what is unfinished — the wrap, the paperwork and the
+closed-test window are.
+
+0. **Before submitting**, in this order:
+   - A **privacy policy at a real URL** (GitHub Pages already serves one). Required for every app,
+     ads or not, and the Data safety form needs it.
+   - **Data safety form**: today the honest answer is "no data collected, no data shared", which is
+     the listing's best line. One qualifier is owed: the read-aloud setting hands item text to the
+     system TTS engine, which is not guaranteed on-device for every language.
+   - **Closed testing** — an individual account has to run one for a fixed window before production
+     opens. Check the console for the current tester count and duration; it is the requirement most
+     likely to add weeks of calendar time, so look it up before planning a date.
+   - Content rating questionnaire, current target API level, Play App Signing, the $25 fee.
+   - Store assets: feature graphic, phone screenshots, short and full description. None exist yet.
 
 1. **Use the new round for a week**, the same way. The widget's design still depends on what you
    actually want at a glance, and that is not answerable from a chair.
@@ -103,6 +118,13 @@ plan. Only the code is public; lists live in each device's storage and never lea
   directly, so a sort returns a copy and the stored array is left alone. Ties break on the name for
   the same reason a picker needs a seed: two lists with three things left must not swap places
   between renders.
+- **Ads stay out, and the arithmetic is why.** At a realistic first year — a few hundred installs, a
+  hundred daily actives — banner revenue lands somewhere around $2 to $15 a month. The cost is fixed
+  and certain: the Data safety form changes from "collects nothing" to "collects device IDs for
+  advertising", a consent flow is needed for EEA/UK, the privacy policy grows to cover an ad network,
+  and the "nothing leaves the device" promise reads as marketing to anyone who sees an ad. Revisit at
+  ~50,000 daily actives and not before. Cosmetics — a colour or theme pack — take money without
+  paywalling a function or adding an SDK, and stay inside "nothing paywalled".
 - **A search is a way of looking, not part of the data.** The query lives in `ui`, never in `state`:
   nothing about it is saved, and leaving the Lists tab ends it. A restored search would look like
   missing lists on the way back in, and a saved one would be a second thing that can go stale.
